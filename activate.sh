@@ -49,6 +49,9 @@ if [[ -f "$REQ_FILE" ]]; then
         echo "    installing project requirements..."
         pip install -r "$REQ_FILE" 2>&1 | grep -E "^(Collecting|Installing|Successfully|Requirement already|ERROR)" || true
         touch "$STAMP_FILE"
+        echo ""
+        echo "    installing project packages (editable)..."
+        pip install -e "$REPO_ROOT" 2>&1 | grep -E "^(Obtaining|Installing|Successfully|ERROR)" || true
     fi
 fi
 

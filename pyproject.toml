@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "formula-e-race-engineer"
+version = "0.1.0"
+description = "Formula E race engineer AI agent — Challenge 2 reference solution"
+requires-python = ">=3.10"
+
+# Dependencies live in requirements.txt for venv setup; this file just makes
+# our own packages installable so cross-package imports work.
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shared*", "agent*", "state_writer*"]
+exclude = [".venv*", "toolbox*", "notebooks*", "scripts*", "deploy*"]
