@@ -4,8 +4,10 @@
 
 set -euo pipefail
 
-SERVICE_NAME="${SERVICE_NAME:-fe-toolbox}"
-REGION="${REGION:-us-central1}"
+if [[ -z "${REGION:-}" ]]; then
+    echo "ERROR: REGION env var required. Run: source activate/activate.sh" >&2
+    exit 1
+fi
 SA_NAME="${SA_NAME:-fe-toolbox-sa}"
 TOOLBOX_IMAGE="${TOOLBOX_IMAGE:-us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.3.0}"
 

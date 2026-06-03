@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Verify Cloud Shell environment is ready to build the race engineer agent.
+# Run this AFTER sourcing activate/activate.sh
 
 set +e  # we want to keep going past failures
 
@@ -11,13 +12,19 @@ miss() { echo "  ✗ $1 — $2"; fail=$((fail+1)); }
 note() { echo "  ○ $1"; }
 
 echo ""
+echo "=== Environment activation ==="
+[[ -n "${VIRTUAL_ENV:-}" ]]   && pass "venv active: $VIRTUAL_ENV"   || miss "venv not active"   "run: source activate/activate.sh"
+[[ -n "${PROJECT_ID:-}" ]]    && pass "PROJECT_ID: $PROJECT_ID"     || miss "PROJECT_ID not set" "run: source activate/activate.sh"
+[[ -n "${REGION:-}" ]]        && pass "REGION: $REGION"             || miss "REGION not set"     "run: source activate/activate.sh"
+
+echo ""
 echo "=== Required tooling ==="
 command -v gcloud   >/dev/null && pass "gcloud installed"   || miss "gcloud"   "install gcloud SDK"
 command -v bq       >/dev/null && pass "bq installed"       || miss "bq"       "comes with gcloud SDK"
 command -v gsutil   >/dev/null && pass "gsutil installed"   || miss "gsutil"   "comes with gcloud SDK"
 command -v git      >/dev/null && pass "git installed"      || miss "git"      "install git"
 command -v python3  >/dev/null && pass "python3 installed"  || miss "python3"  "install python3"
-command -v pip3     >/dev/null && pass "pip3 installed"     || miss "pip3"     "install pip"
+command -v pip      >/dev/null && pass "pip installed"      || miss "pip"      "comes with venv"
 command -v curl     >/dev/null && pass "curl installed"     || miss "curl"     "install curl"
 command -v jq       >/dev/null && pass "jq installed"       || miss "jq"       "sudo apt-get install -y jq"
 
@@ -34,19 +41,14 @@ fi
 
 echo ""
 echo "=== GCP context ==="
-PROJECT="$(gcloud config get-value project 2>/dev/null)"
 ACCOUNT="$(gcloud config get-value account 2>/dev/null)"
-REGION_CFG="$(gcloud config get-value run/region 2>/dev/null)"
-
-[[ -n "$PROJECT" ]]    && pass "project: $PROJECT"        || miss "project not set"     "gcloud config set project YOUR_PROJECT"
-[[ -n "$ACCOUNT" ]]    && pass "account: $ACCOUNT"        || miss "not authenticated"   "gcloud auth login"
-[[ -n "$REGION_CFG" ]] && pass "run region: $REGION_CFG"  || note "run region not set (will be configured later)"
+[[ -n "$ACCOUNT" ]] && pass "account: $ACCOUNT" || miss "not authenticated" "gcloud auth login"
 
 echo ""
 echo "=== Agent tooling (installed in a later chunk if missing) ==="
 command -v adk >/dev/null && pass "adk CLI: $(adk --version 2>&1 | head -1)" || note "adk CLI not installed yet"
-pip3 show google-adk >/dev/null 2>&1 && pass "google-adk python package" || note "google-adk not installed yet"
-pip3 show google-cloud-aiplatform >/dev/null 2>&1 && pass "google-cloud-aiplatform python package" || note "google-cloud-aiplatform not installed yet"
+pip show google-adk >/dev/null 2>&1 && pass "google-adk python package" || note "google-adk not installed yet"
+pip show google-cloud-aiplatform >/dev/null 2>&1 && pass "google-cloud-aiplatform python package" || note "google-cloud-aiplatform not installed yet"
 
 echo ""
 echo "=== Simulator (deployed in a later chunk) ==="

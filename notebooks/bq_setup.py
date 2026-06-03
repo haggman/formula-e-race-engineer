@@ -27,7 +27,11 @@ PROJECT_ID = (
     ).strip()
 )
 
-REGION  = "us-central1"           # must match bucket region
+REGION = os.environ.get("REGION")
+if not REGION:
+    raise RuntimeError(
+        "REGION env var required. Run: source activate/activate.sh"
+    )
 DATASET = "fe_race10"
 BUCKET  = "class-demo"
 

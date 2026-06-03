@@ -2,13 +2,17 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-03
+**Last updated:** 2026-06-03 (chunk 5 design — three-service split)
 
 ---
 
 ## Where we are
 
-Chunks 1–4 complete. MCP Toolbox deployed to Cloud Run with 11/11 tools validated against the deployed URL via `toolbox-core` SDK 1.1.0. Ready to start chunk 5 (frame-state tools).
+Chunks 1–4.5 complete. Firestore Native db created in the lab project, agent folder skeleton in place.
+
+Architecture pivoted from two services to **three**: Simulator → **State Writer** (Pub/Sub → Firestore) → Frontend + Agent. Pedagogically cleaner (three teach-points instead of two), enables team parallelism in the hackathon, and gives each service one job. Shared Pydantic models in `shared/` package so State Writer and Agent agree on the contract.
+
+Ready to write chunk 5 code: shared models package, State Writer service, agent frame tools, seed + test scripts.
 
 ---
 
@@ -17,12 +21,15 @@ Chunks 1–4 complete. MCP Toolbox deployed to Cloud Run with 11/11 tools valida
 | Area | Decision |
 |---|---|
 | **Driver** | Car #13 — António Félix da Costa (R10 winner, P10→P3 by lap 5 charge, 9 scenario armings) |
-| **Architecture** | Single ADK agent, two entry points. Frontend Cloud Run service is the streaming hub (subscribes to Pub/Sub, runs deterministic significance scorer, calls agent on triggers). Agent stays stateless. |
+| **Architecture** | Three services + Firestore. **State Writer** (Pub/Sub push → Firestore) handles ingestion; **Agent** (Agent Engine) handles reasoning; **Frontend** (Cloud Run) handles UX, significance scoring, agent invocation. Firestore is the integration point — single source of truth for current race state and events. All three services stateless. |
+| **Service topology** | (1) Simulator on Cloud Run → fe-telemetry Pub/Sub. (2) State Writer on Cloud Run subscribes to topic, writes RaceState + Event docs to Firestore. (3) Agent on Agent Engine reads Firestore via frame tools + BigQuery via MCP Toolbox. (4) Frontend on Cloud Run reads Firestore for live UI, runs significance scorer, invokes Agent. |
+| **Shared models** | `shared/` package at repo root holds canonical Pydantic models for RaceState, CarState, Event. Both State Writer and Agent import from it. Single source of truth for the Firestore contract. ADK deploy bundles `shared/` via `--extra-packages` (or symlink at deploy time — TBD chunk 6). |
 | **Model** | `gemini-3-flash-preview`, global location only |
 | **Agent runtime** | Vertex AI Agent Engine, deployed via `adk` CLI |
 | **BQ tooling** | MCP Toolbox for Databases — curated named queries + one SQL escape hatch. Hybrid documented in lab; we use Toolbox for the build. |
 | **BQ dataset region** | us-central1 (matches bucket) |
-| **Frontend** | FastAPI + websocket on Cloud Run. Live state panel, scrolling transcript, text + push-to-talk voice input |
+| **State store** | Firestore Native mode, `(default)` database in lab project, free-tier sufficient. Two collections: `race_states/(default)` for current RaceState doc, `race_events/{auto-id}` for individual Event docs indexed by ts_ns, race_time_s, event_type, car_number. |
+| **Frontend** | FastAPI + websocket on Cloud Run. Reads Firestore for live state, runs significance scorer, calls agent on triggers, browser UI, TTS/STT. |
 | **Voice in** | Push-to-talk via MediaRecorder API → Cloud Speech-to-Text v2 |
 | **Voice out** | Cloud Text-to-Speech, Chirp 3 HD British male, 1.15× rate |
 | **Agent persona** | Second-person ("Antonio, ..."), real engineer style. ~6-8s spoken radio calls. No editorializing. |
@@ -30,7 +37,7 @@ Chunks 1–4 complete. MCP Toolbox deployed to Cloud Run with 11/11 tools valida
 | **Significance scorer** | Deterministic, lives in frontend, debounced (no trigger within 15s of last) |
 | **Agent sessions** | Fresh per trigger for proactive announcements; persistent session for Q&A follow-ups |
 | **Toolbox auth** | Open during dev (now), authenticated via service-account invoker when frontend deploys (chunk 13) |
-| **Pub/Sub flow** | Frontend is the only subscriber. Agent never directly subscribes. State pushed to agent prompt as context per call. |
+| **Pub/Sub flow** | Single subscriber: State Writer service via push subscription. Pub/Sub never reaches frontend or agent directly. |
 | **R09 inclusion** | Not loaded — R10 only for Fork 2. R09 deferred. |
 | **Demo stint** | Laps 1–10, anchored by lap-3 AM cluster (DAC was *not* in the cluster — strategic hold-back, contrary to ~13 cars who activated). |
 | **BQML** | Stretch / Task 7 only. Not in core reference. Pattern stub may appear later for extraction into Fork 5 starter. |
@@ -39,6 +46,8 @@ Chunks 1–4 complete. MCP Toolbox deployed to Cloud Run with 11/11 tools valida
 | **Deploy style** | Cloud Run source deploys (`gcloud run deploy --source .`); Artifact Registry mentioned as "production" alternative |
 | **Env target** | Qwiklabs student labs. Cloud Shell with Cloud Shell Editor as dev environment. Per-team GCP projects, ephemeral. |
 | **Python** | 3.12, default in Cloud Shell |
+| **Virtual env** | `.venv/` at repo root, created and activated by `source ./activate` |
+| **Region convention** | All scripts read `REGION` from env (set by `activate` to us-central1 default, override before sourcing). Bucket reference to `gs://class-demo` stays hardcoded — published artifact at known location. |
 
 ---
 
@@ -108,11 +117,31 @@ Deployed service: `fe-toolbox` in us-central1
 
 All 11 tools validated against deployed URL via `toolbox-core` SDK 1.1.0.
 
+### Chunk 4.5 — Cleanup pass ✅
+
+Three concerns addressed before starting chunk 5:
+
+- **Virtual environment** — `.venv/` at repo root, gitignored. Created by `source ./activate`.
+- **Activate script** — `./activate` at repo root sources venv + sets env vars + installs requirements (idempotent via stamp file). One command per Cloud Shell session. Verbose install output (grep-filtered) so students see what's installing.
+- **Region as env var** — all scripts now read `REGION` from env, no hardcoded defaults in application code. `activate` script sets the default (us-central1). Students override with `export REGION=...` before sourcing if their lab assigns a different region.
+
+Files added/changed:
+- `activate` (new) — venv + env setup
+- `deploy/setup_firestore.sh` (new) — created here so chunk 5 can run it
+- `scripts/env_check.sh` — now checks venv active, REGION, PROJECT_ID
+- `notebooks/bq_setup.py` — reads REGION from env, raises if unset
+- `deploy/deploy_toolbox.sh` — reads REGION from env, fails fast if unset
+- `.gitignore` — added `.venv/`
+- `README.md` — Quick Start updated for `source ./activate` flow
+- `requirements.txt` — expanded to cover chunks 5-11 (BQ, Toolbox, Firestore, Pydantic, ADK, Agent Engine, FastAPI, Pub/Sub, TTS, STT). Strict pins only on `toolbox-core==1.1.0` and `google-adk>=1.0,<2`; everything else uses floors so pip can resolve a coherent matrix.
+
+env_check: 14/14 pass. bq_setup.py re-ran cleanly with env-driven config.
+
 ---
 
 ## In progress
 
-*Nothing in flight. Ready to start chunk 5.*
+**Chunk 5 — data plane.** Firestore Native db created (`(default)` in us-central1), agent folder skeleton in place at `agent/race_engineer/tools/`. Architecture pivoted to three services. Code for shared models, State Writer service, agent frame tools, seed + test scripts is the next deliverable.
 
 ---
 
@@ -120,15 +149,15 @@ All 11 tools validated against deployed URL via `toolbox-core` SDK 1.1.0.
 
 | # | Chunk | What it produces |
 |---|---|---|
-| **5** | Frame-state tools | `agent/frame_tools.py` — `get_current_state`, `get_recent_events`, `get_field_am_status`, unit-tested against sample frame |
-| 6 | Agent definition | `agent/agent.py` + `agent/prompts.py` — ADK agent wired to model, Toolbox MCP, and frame tools. `adk web` runs locally for text chat |
-| 7 | Significance scorer + local harness | `scripts/local_test.py` — pulls live Pub/Sub, scores frames, calls agent on triggers, prints + plays TTS. Validate against laps 1–10 |
+| **5** | **Data plane** — State Writer + frame tools | `shared/` Pydantic models, `state_writer/` Cloud Run service (Pub/Sub push → Firestore), `agent/race_engineer/tools/` frame tools (read Firestore + 1s TTL cache), seed script, test script. State Writer deployed; live frames flowing simulator → topic → Firestore. |
+| 6 | Agent definition | `agent/race_engineer/agent.py` + `prompts.py` — ADK agent wired to model, Toolbox MCP, and frame tools. `adk web` runs locally against live Firestore data for text chat. |
+| 7 | Significance scorer + local harness | `scripts/local_test.py` — reads Firestore state, scores frames, calls agent on triggers, prints + plays TTS. Validate against laps 1–10. |
 | 8 | **Reasoning iteration** | Prompt and tool refinements until laps 1–10 reasoning is good. *Where most of the value lands.* |
-| 9 | Frontend (text-only) | `frontend/` — FastAPI + websocket + Pub/Sub subscriber + browser UI |
+| 9 | Frontend (text-only) | `frontend/` — FastAPI + websocket + Firestore reader + browser UI. No Pub/Sub here; State Writer owns ingestion. |
 | 10 | TTS wired in | Chirp 3 British male, 1.15× rate, browser playback |
 | 11 | STT + push-to-talk | MediaRecorder + Cloud STT v2 |
-| 12 | Agent → Agent Engine | `adk deploy agent_engine`, frontend talks to remote agent |
-| 13 | Frontend → Cloud Run, auth flip | Toolbox to authenticated, service account invoker bindings, full demo URL |
+| 12 | Agent → Agent Engine | `adk deploy agent_engine` (with shared/ bundled), frontend talks to remote agent |
+| 13 | Frontend → Cloud Run, auth flip | Toolbox to authenticated, service account invoker bindings, State Writer auth tightened, full demo URL |
 | 14 | Demo dry run | Laps 1–10 at 1.0× speed; capture what the agent says |
 | 15 | *(Stretch)* | BQML AM score tool; Gemini Live spike |
 
@@ -195,6 +224,18 @@ These didn't make the build doc but matter for downstream work:
 - `--enable-api` server flag re-enables the legacy endpoint if needed, but it's deprecated; use the matched 1.x SDK instead
 - Server flag is `--config` in v1.x (not `--tools-file`, which is deprecated and warns at startup)
 
+**Dependency pinning strategy:**
+- Use strict `==` pins only where the version *must* match an external surface (toolbox-core matches the deployed Toolbox server's protocol; google-adk's 1.x API is the agent contract)
+- Everything else uses `>=` floors so pip can resolve a coherent transitive matrix
+- Aggressive strict pinning across the requirements file causes `ResolutionImpossible` errors when transitive deps (protobuf, grpcio, google-api-core) want incompatible ranges
+
+**Three-service architecture rationale:**
+- Two services (frontend owns ingestion + UX) would have collapsed concerns and made the lab harder to teach
+- Three services (Writer / Agent / Frontend) gives the hackathon three clean team handoff points: ingestion patterns, agent reasoning, UX orchestration
+- Firestore as integration point means each service is stateless; frontend can scale or restart freely; agent is fully decoupled from real-time stream
+- Pub/Sub push to State Writer (vs. streaming pull) is the canonical Cloud Run pattern — scales 0→N based on message rate, no long-running subscriber loop
+- Architecture lift cost: ~one extra deploy script and one Pub/Sub push subscription; reasoning quality and teachability gain far outweighs
+
 ---
 
 ## Live TODO
@@ -206,7 +247,8 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 3.5 — add `get_top_speed_history` tool
 - [x] Top_speed cleanup pass — dropped broken column from `get_lap_history`, `get_field_position_at_lap`, and `v_laps_with_driver`; added INT64-ns convention doc to `execute_sql_bq`
 - [x] Chunk 4 — Toolbox to Cloud Run
-- [ ] Chunk 5 — frame-state tools
+- [x] Chunk 4.5 — venv + activate + region-env-var cleanup
+- [ ] Chunk 5 — data plane (shared models, State Writer service, frame tools, seed + test)
 - [ ] Chunk 6 — agent definition
 - [ ] Chunk 7 — significance scorer + local harness
 - [ ] Chunk 8 — reasoning iteration on laps 1–10

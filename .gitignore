@@ -36,3 +36,6 @@ htmlcov/
 # Cloud Shell editor scratch
 *.swp
 .DS_Store
+
+# Misc
+.venv/

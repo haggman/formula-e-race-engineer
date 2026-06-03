@@ -35,10 +35,13 @@ Google ADK · Vertex AI Agent Engine · MCP Toolbox for Databases · BigQuery ·
 
 ## Quick start
 
-Run the environment check first:
+Set up your environment (creates venv, installs requirements, sets REGION + PROJECT_ID):
 
-```
-bash scripts/env_check.sh
+    source ./activate
+
+Verify it worked:
+
+    bash scripts/env_check.shcripts/env_check.sh
 ```
 
 Then follow `BUILD.md` (added in Chunk 2) for the step-by-step build sequence.
