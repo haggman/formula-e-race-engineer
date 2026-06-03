@@ -2,15 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-02
+**Last updated:** 2026-06-03
 
 ---
 
 ## Where we are
 
-Chunks 1–3 complete (with a chunk-2 extension for telemetry). Chunk 4 (deploy MCP Toolbox to Cloud Run) is queued and ready to run. Currently doing a top_speed cleanup pass before starting chunk 4.
-
-Eleven Toolbox tools validated locally against real BQ data. Agent design and frontend architecture locked. All open questions from the build doc resolved.
+Chunks 1–4 complete. MCP Toolbox deployed to Cloud Run with 11/11 tools validated against the deployed URL via `toolbox-core` SDK 1.1.0. Ready to start chunk 5 (frame-state tools).
 
 ---
 
@@ -93,15 +91,28 @@ Plus 3 views: `v_laps_with_driver`, `v_am_with_driver`, `v_overtakes`.
 10. `get_field_position_at_lap` — full field snapshot at end of lap N
 11. `execute_sql_bq` — SELECT-only escape hatch with schema docs
 
-Toolbox binary v0.7.0 in `toolbox/` (gitignored). `scripts/toolbox_test.py` validates all 11 tools against `localhost:5000` or `$TOOLBOX_URL`. 11/11 ✓ locally.
+Toolbox binary v1.3.0 in `toolbox/` (gitignored). `scripts/toolbox_test.py` validates all 11 tools via the `toolbox-core` SDK against `localhost:5000` or `$TOOLBOX_URL`.
 
 **Post-chunk cleanup:** `get_lap_history` and `get_field_position_at_lap` no longer return broken `top_speed_kmh` zeros — agent steered to `get_top_speed_history` instead. `execute_sql_bq` description now documents INT64-ns convention for time columns.
+
+### Chunk 4 — MCP Toolbox to Cloud Run ✅
+
+`deploy/deploy_toolbox.sh` — idempotent deploy of MCP Toolbox v1.3.0 to Cloud Run.
+
+Deployed service: `fe-toolbox` in us-central1
+- Image: `us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.3.0`
+- Service account: `fe-toolbox-sa` with `roles/bigquery.dataViewer` + `roles/bigquery.jobUser`
+- Tools config: `tools.yaml` staged in `${PROJECT_ID}-fe-toolbox` GCS bucket, mounted at `/tools/tools.yaml` via Cloud Run GCS volume
+- Resources: 1 CPU / 512Mi memory / cpu-boost on / min-instances=1 / max-instances=3
+- Open auth (`--allow-unauthenticated`) — will flip to service-account invoker in chunk 13
+
+All 11 tools validated against deployed URL via `toolbox-core` SDK 1.1.0.
 
 ---
 
 ## In progress
 
-*Nothing in flight. Ready to start chunk 4.*
+*Nothing in flight. Ready to start chunk 5.*
 
 ---
 
@@ -109,8 +120,7 @@ Toolbox binary v0.7.0 in `toolbox/` (gitignored). `scripts/toolbox_test.py` vali
 
 | # | Chunk | What it produces |
 |---|---|---|
-| **4** | Toolbox → Cloud Run | `deploy/deploy_toolbox.sh`, fe-toolbox service running with open auth, 11 tools callable via deployed URL |
-| 5 | Frame-state tools | `agent/frame_tools.py` — `get_current_state`, `get_recent_events`, `get_field_am_status`, unit-tested against sample frame |
+| **5** | Frame-state tools | `agent/frame_tools.py` — `get_current_state`, `get_recent_events`, `get_field_am_status`, unit-tested against sample frame |
 | 6 | Agent definition | `agent/agent.py` + `agent/prompts.py` — ADK agent wired to model, Toolbox MCP, and frame tools. `adk web` runs locally for text chat |
 | 7 | Significance scorer + local harness | `scripts/local_test.py` — pulls live Pub/Sub, scores frames, calls agent on triggers, prints + plays TTS. Validate against laps 1–10 |
 | 8 | **Reasoning iteration** | Prompt and tool refinements until laps 1–10 reasoning is good. *Where most of the value lands.* |
@@ -179,6 +189,12 @@ These didn't make the build doc but matter for downstream work:
 
 **Team name casing in source data is inconsistent** ("DS PENSKE", "Andretti Formula E", "ERT Formula E Team"). Agent system prompt should normalize for TTS output ("DS Penske", not "DS PENSKE" — TTS will shout uppercase).
 
+**Toolbox SDK / server version alignment:**
+- Toolbox server v1.x (we use 1.3.0) speaks MCP JSON-RPC at `/mcp` and disables the legacy `/api/...` REST endpoints by default
+- Use `toolbox-core` SDK v1.x (we use 1.1.0) which speaks `/mcp` natively — the 0.5.x SDKs use the old REST path and 410 against modern servers
+- `--enable-api` server flag re-enables the legacy endpoint if needed, but it's deprecated; use the matched 1.x SDK instead
+- Server flag is `--config` in v1.x (not `--tools-file`, which is deprecated and warns at startup)
+
 ---
 
 ## Live TODO
@@ -189,7 +205,7 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 3 — MCP Toolbox locally (11 tools)
 - [x] Chunk 3.5 — add `get_top_speed_history` tool
 - [x] Top_speed cleanup pass — dropped broken column from `get_lap_history`, `get_field_position_at_lap`, and `v_laps_with_driver`; added INT64-ns convention doc to `execute_sql_bq`
-- [ ] Chunk 4 — Toolbox to Cloud Run
+- [x] Chunk 4 — Toolbox to Cloud Run
 - [ ] Chunk 5 — frame-state tools
 - [ ] Chunk 6 — agent definition
 - [ ] Chunk 7 — significance scorer + local harness
@@ -208,3 +224,5 @@ These didn't make the build doc but matter for downstream work:
 ## How to use this doc
 
 Update after every completed chunk. Move items from "Up next" to "Built so far" as they ship. Add to "Findings worth remembering" whenever something non-obvious shows up. The whole point is that if this conversation ends abruptly, a fresh Claude (or a fresh you, six weeks from now) should be able to read this and know exactly where the build stands.
+
+**Workflow note:** Claude maintains a canonical copy in its workspace and applies targeted edits per chunk (not full rewrites). After each update, Claude presents the latest version and Patrick overwrites his local `PROGRESS.md` in the repo.
