@@ -28,6 +28,9 @@ TESTS = [
     ("get_lap_history",
      {"car_number": 13, "lap_start": 1, "lap_end": 10}),
 
+     ("get_top_speed_history",
+     {"car_number": 13, "lap_start": 1, "lap_end": 10}),
+
     ("get_energy_curve",
      {"car_number": 13, "through_lap": 10}),
 

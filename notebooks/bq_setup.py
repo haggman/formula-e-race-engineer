@@ -94,6 +94,8 @@ TABLES = {
         1500,
         "Unified events (laps, AM, RC, overtakes)",
     ),
+    # NOTE: telemetry is loaded separately below — Hive partitioning needs
+    # special LoadJobConfig that doesn't fit the simple TABLES pattern.
     "career_driver": (
         "formula-e/cross_challenge/race_results/driver.parquet",
         80,
@@ -142,13 +144,106 @@ for name, (path, expected_min, _) in TABLES.items():
         print(f"✗ FAILED: {e}")
 
 # %%
+# Cell 6a — Telemetry load (Hive-partitioned, clustered on car_number)
+#
+# Layout: gs://class-demo/formula-e/berlin_2024/r10/telemetry/car_number=N/
+# The car_number column is inferred from the directory name, not from the file.
+# Clustering on car_number gives sub-second queries on per-car time ranges.
+
+print("\nLoading telemetry (Hive-partitioned)...")
+print("  ~1.28M rows across 22 cars — takes 30-60s")
+
+TELEMETRY_TABLE = f"{PROJECT_ID}.{DATASET}.telemetry"
+TELEMETRY_URI = f"gs://{BUCKET}/formula-e/berlin_2024/r10/telemetry/*"
+TELEMETRY_SOURCE_PREFIX = f"gs://{BUCKET}/formula-e/berlin_2024/r10/telemetry/"
+
+hive_opts = bigquery.HivePartitioningOptions()
+hive_opts.mode = "AUTO"
+hive_opts.source_uri_prefix = TELEMETRY_SOURCE_PREFIX
+
+telemetry_job_config = bigquery.LoadJobConfig(
+    source_format=bigquery.SourceFormat.PARQUET,
+    write_disposition=bigquery.WriteDisposition.WRITE_TRUNCATE,
+    autodetect=True,
+    hive_partitioning=hive_opts,
+    clustering_fields=["car_number"],
+)
+
+try:
+    load_job = bq.load_table_from_uri(
+        TELEMETRY_URI,
+        TELEMETRY_TABLE,
+        job_config=telemetry_job_config,
+        location=REGION,
+    )
+    load_job.result()
+    t = bq.get_table(TELEMETRY_TABLE)
+    print(f"  ✓ telemetry             {t.num_rows:>9,} rows  ({t.num_bytes / 1e6:.2f} MB)")
+    print(f"     clustered on: {list(t.clustering_fields) if t.clustering_fields else 'none'}")
+    # Track in results for the summary at the end
+    results.append({
+        "table": "telemetry",
+        "rows": t.num_rows,
+        "size_mb": round(t.num_bytes / 1e6, 2),
+        "status": "ok",
+    })
+except Exception as e:
+    print(f"  ✗ telemetry FAILED: {e}")
+    results.append({"table": "telemetry", "status": "fail", "error": str(e)})
+
+# %%
+# Cell 6b  — Materialize top_speed_per_lap as a real table
+#
+# The correlated subquery (find lap for each 20Hz sample) is too expensive
+# to run repeatedly via a view. Race data is frozen — materialize it once,
+# cluster on car_number, fast queries forever.
+
+print("\nMaterializing top_speed_per_lap (one-shot derived table)...")
+
+TOP_SPEED_TABLE = f"{PROJECT_ID}.{DATASET}.top_speed_per_lap"
+
+# Use a window-style join: anti-correlated subquery is fine for one-shot CTAS.
+top_speed_sql = f"""
+CREATE OR REPLACE TABLE `{TOP_SPEED_TABLE}`
+CLUSTER BY car_number AS
+WITH telem_with_lap AS (
+    SELECT
+        t.car_number,
+        t.tv_speed,
+        (
+            SELECT MAX(l.lap_num)
+            FROM `{PROJECT_ID}.{DATASET}.laps` l
+            WHERE l.car_number = t.car_number
+              AND l.start_time <= t.time
+        ) AS lap_num
+    FROM `{PROJECT_ID}.{DATASET}.telemetry` t
+)
+SELECT
+    car_number,
+    lap_num,
+    ROUND(MAX(tv_speed), 1) AS top_speed_kmh,
+    COUNT(*) AS telemetry_samples
+FROM telem_with_lap
+WHERE lap_num IS NOT NULL
+GROUP BY car_number, lap_num
+"""
+
+try:
+    bq.query(top_speed_sql, location=REGION).result()
+    t = bq.get_table(TOP_SPEED_TABLE)
+    print(f"  ✓ top_speed_per_lap     {t.num_rows:>9,} rows  ({t.num_bytes / 1e6:.2f} MB)")
+    print(f"     clustered on: {list(t.clustering_fields) if t.clustering_fields else 'none'}")
+except Exception as e:
+    print(f"  ✗ top_speed_per_lap FAILED: {e}")
+
+# %%
 # Cell 7 — Convenience views
 print("\nCreating convenience views...")
 VIEWS = {
     "v_laps_with_driver": """
         SELECT l.car_number, d.driver_first_name, d.driver_last_name,
                d.driver_short_name, d.team, d.manufacturer,
-               l.lap_num, l.time AS lap_time_ms, l.top_speed,
+               l.lap_num, l.time AS lap_time_ms,
                l.position, l.is_valid
         FROM `{p}.{d}.laps` l
         LEFT JOIN `{p}.{d}.drivers` d USING (car_number)
@@ -201,6 +296,15 @@ SAMPLES = [
      "SELECT shortcode, drivername, wins, podiums, points "
      "FROM `{p}.{d}.career_driver` "
      "WHERE shortcode IN ('DAC','CAS','EVA') ORDER BY shortcode"),
+     ("telemetry (DAC car 13, first 3 samples)",
+     "SELECT car_number, time, tv_speed, tv_brake "
+     "FROM `{p}.{d}.telemetry` WHERE car_number = 13 "
+     "ORDER BY time LIMIT 3"),
+    ("top_speed_per_lap (DAC laps 1-5)",
+     "SELECT lap_num, top_speed_kmh, telemetry_samples "
+     "FROM `{p}.{d}.top_speed_per_lap` "
+     "WHERE car_number = 13 AND lap_num BETWEEN 1 AND 5 "
+     "ORDER BY lap_num"),
 ]
 for label, sql_t in SAMPLES:
     print(f"  -- {label}")

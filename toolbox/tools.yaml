@@ -43,8 +43,11 @@ tools:
     source: bq-fe-race10
     description: |
       Per-lap timing for a car over a range of laps. Returns lap time (ms),
-      top speed (km/h), position at end of lap, and validity flag. Use this
-      to assess pace, find fastest laps, or check recent position trends.
+      position at end of lap, and validity flag. Use this to assess pace,
+      find fastest laps, or check recent position trends.
+
+      Note: for top speed per lap, use get_top_speed_history instead.
+      The top_speed column in the source laps table is broken (always 0).
     parameters:
       - name: car_number
         type: integer
@@ -59,7 +62,6 @@ tools:
       SELECT
         lap_num,
         time AS lap_time_ms,
-        top_speed AS top_speed_kmh,
         position,
         is_valid
       FROM `fe_race10.laps`
@@ -67,6 +69,41 @@ tools:
         AND lap_num BETWEEN @lap_start AND @lap_end
       ORDER BY lap_num
 
+  get_top_speed_history:
+    kind: bigquery-sql
+    source: bq-fe-race10
+    description: |
+      Per-lap top speed for a car over a range of laps. Top speed is the
+      maximum 20 Hz telemetry sample within each lap window. Use this to
+      spot Attack Mode usage (AM adds +50 kW, which usually shows up as a
+      noticeable bump in top speed), slipstream effects, or pace patterns.
+
+      Returned values are in km/h. Each row also includes the number of
+      telemetry samples that fell in that lap (~1200 for a normal racing
+      lap at 20 Hz, fewer for safety car laps or shortened first laps).
+
+      Important context: top_speed in the `laps` table itself is broken
+      (always 0). Always use this tool for top speed, never the laps table.
+    parameters:
+      - name: car_number
+        type: integer
+        description: "Car number"
+      - name: lap_start
+        type: integer
+        description: "First lap to include (inclusive). Use 1 for race start."
+      - name: lap_end
+        type: integer
+        description: "Last lap to include (inclusive). Use 41 for full race."
+    statement: |
+      SELECT
+        lap_num,
+        top_speed_kmh,
+        telemetry_samples
+      FROM `fe_race10.top_speed_per_lap`
+      WHERE car_number = @car_number
+        AND lap_num BETWEEN @lap_start AND @lap_end
+      ORDER BY lap_num
+  
   get_energy_curve:
     kind: bigquery-sql
     source: bq-fe-race10
@@ -257,8 +294,11 @@ tools:
     source: bq-fe-race10
     description: |
       Snapshot of all cars' positions at the end of a given lap. Returns
-      position, car number, driver code, team, and that lap's time and top speed.
-      Use this to answer "where is the field at lap N" or to find gaps between cars.
+      position, car number, driver code, team, and that lap's time. Use this
+      to answer "where is the field at lap N" or to find gaps between cars.
+
+      Note: for top speed per car per lap, use get_top_speed_history.
+      The top_speed column in the source laps table is broken (always 0).
     parameters:
       - name: lap_number
         type: integer
@@ -269,8 +309,7 @@ tools:
         l.car_number,
         d.driver_short_name,
         d.team,
-        l.time AS lap_time_ms,
-        l.top_speed AS top_speed_kmh
+        l.time AS lap_time_ms
       FROM `fe_race10.laps` l
       LEFT JOIN `fe_race10.drivers` d USING (car_number)
       WHERE l.lap_num = @lap_number
@@ -285,11 +324,18 @@ tools:
 
       Available tables:
         drivers, startgrid, laps, attack, energy_per_lap,
-        racecontrol_classified, event_stream,
+        racecontrol_classified, event_stream, telemetry,
+        top_speed_per_lap,
         career_driver, career_race
 
       Available views:
         v_laps_with_driver, v_am_with_driver, v_overtakes
+
+      Important data notes:
+        - laps.top_speed is broken (always 0). Use top_speed_per_lap instead.
+        - Time columns (event_stream.t, laps.start_time, attack.eth_arrival_time,
+          telemetry.time, racecontrol_classified.time) are all INT64 nanoseconds
+          since epoch. Compare directly, no UNIX_MICROS or TIMESTAMP_MICROS needed.
 
       Rules:
         - SELECT only. No DDL, no DML.
@@ -300,6 +346,7 @@ toolsets:
   race-engineer:
     - get_driver_info
     - get_lap_history
+    - get_top_speed_history
     - get_energy_curve
     - get_recent_race_control
     - get_am_activations
