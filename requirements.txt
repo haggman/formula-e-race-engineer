@@ -1,0 +1,15 @@
+# Formula E Race Engineer Agent — Python dependencies
+#
+# Pinned versions used during the Fork 2 build. Update with care:
+# Toolbox SDK and ADK are both actively developed and version drift
+# can break the agent's MCP integration.
+
+# --- BigQuery setup (notebooks/bq_setup.py) ---
+google-cloud-bigquery==3.27.0
+google-cloud-storage==2.18.2
+
+# --- Toolbox client SDK (scripts/toolbox_test.py, agent in chunk 6) ---
+toolbox-core==1.1.0
+
+# --- Test harness ---
+# (no extras needed — toolbox-core provides everything)

@@ -1,26 +1,30 @@
-"""Validate every Toolbox tool against the deployed local Toolbox server.
+"""Validate every Toolbox tool against a running Toolbox server.
 
-Run after starting the toolbox server in another tab:
+Uses the official toolbox-core SDK rather than raw HTTP, which handles
+version-specific protocol details (REST in v0.x, MCP in v1.x).
+
+Run with the local server in another tab:
     cd toolbox && ./toolbox --tools-file tools.yaml --port 5000
 
 Then:
     python scripts/toolbox_test.py
+
+For the deployed instance, set TOOLBOX_URL:
+    TOOLBOX_URL=https://fe-toolbox-xxx.run.app python scripts/toolbox_test.py
 """
+import asyncio
 import json
+import os
 import sys
-import requests
 
-BASE = "http://localhost:5000/api/tool"
+from toolbox_core import ToolboxClient
 
-# All tools called by name with realistic args for Berlin 2024 R10.
-# Wall-clock time anchors used below:
-#   pre-race      ~1_715_516_000_000_000_000 ns  (R10 start window)
-#   race start    ~1_715_517_840_000_000_000 ns  (rough green flag)
-#   mid race      ~1_715_519_000_000_000_000 ns
-#   post race     ~1_715_521_000_000_000_000 ns
+TOOLBOX_URL = os.environ.get("TOOLBOX_URL", "http://127.0.0.1:5000").rstrip("/")
 
+# Wall-clock-ns anchor for the end of R10 (slightly past chequered)
 POST_RACE = 1_715_521_000_000_000_000
 
+# (tool_name, kwargs)
 TESTS = [
     ("get_driver_info",
      {"car_number": 13}),
@@ -28,7 +32,7 @@ TESTS = [
     ("get_lap_history",
      {"car_number": 13, "lap_start": 1, "lap_end": 10}),
 
-     ("get_top_speed_history",
+    ("get_top_speed_history",
      {"car_number": 13, "lap_start": 1, "lap_end": 10}),
 
     ("get_energy_curve",
@@ -57,46 +61,60 @@ TESTS = [
 ]
 
 
-def short(obj, limit=400):
-    s = json.dumps(obj, default=str, indent=2)
-    return s if len(s) <= limit else s[:limit] + f"\n... ({len(s)} chars total)"
-
-
-def main():
-    fails = 0
-    for name, args in TESTS:
-        print(f"\n── {name} ──")
-        print(f"args: {args}")
+def normalize_result(result):
+    """Result may come back as str, list, or dict depending on tool. Normalize."""
+    if isinstance(result, str):
         try:
-            r = requests.post(f"{BASE}/{name}/invoke", json=args, timeout=30)
-            if r.status_code >= 400:
-                print(f"  ✗ HTTP {r.status_code}")
-                print(f"    body: {r.text[:500]}")
+            return json.loads(result)
+        except json.JSONDecodeError:
+            return result
+    return result
+
+
+def render(result):
+    """Print result in the same shape as the old REST-based test."""
+    if isinstance(result, list):
+        print(f"  ✓ {len(result)} row(s)")
+        for row in result[:3]:
+            print(f"    {row}")
+        if len(result) > 3:
+            print(f"    ... +{len(result) - 3} more")
+    else:
+        s = json.dumps(result, default=str, indent=2)
+        if len(s) > 400:
+            s = s[:400] + f"\n... ({len(s)} chars total)"
+        print(f"  ✓ result: {s}")
+
+
+async def main():
+    print(f"Testing toolbox at: {TOOLBOX_URL}\n")
+    fails = 0
+
+    async with ToolboxClient(TOOLBOX_URL) as client:
+        # Load the race-engineer toolset
+        tools = await client.load_toolset("race-engineer")
+        by_name = {t.__name__: t for t in tools}
+        print(f"Loaded {len(tools)} tools from toolset 'race-engineer'")
+        print(f"  names: {sorted(by_name.keys())}\n")
+
+        for name, args in TESTS:
+            print(f"── {name} ──")
+            print(f"args: {args}")
+            tool = by_name.get(name)
+            if tool is None:
+                print(f"  ✗ tool not found in toolset")
                 fails += 1
                 continue
-            body = r.json()
-        except Exception as e:
-            print(f"  ✗ HTTP error: {e}")
-            fails += 1
-            continue
-        # Toolbox returns {"result": "<json-encoded string>"} or similar
-        result = body.get("result", body)
-        if isinstance(result, str):
             try:
-                result = json.loads(result)
-            except json.JSONDecodeError:
-                pass
-        # Surface row count if list, else just show
-        if isinstance(result, list):
-            print(f"  ✓ {len(result)} row(s)")
-            for row in result[:3]:
-                print(f"    {row}")
-            if len(result) > 3:
-                print(f"    ... +{len(result) - 3} more")
-        else:
-            print(f"  ✓ result: {short(result)}")
+                result = await tool(**args)
+                result = normalize_result(result)
+                render(result)
+            except Exception as e:
+                print(f"  ✗ {type(e).__name__}: {e}")
+                fails += 1
+            print()
 
-    print("\n" + "=" * 50)
+    print("=" * 50)
     if fails:
         print(f"  ✗ {fails} tool(s) failed")
         sys.exit(1)
@@ -105,4 +123,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
