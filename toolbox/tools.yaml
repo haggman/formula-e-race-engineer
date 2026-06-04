@@ -112,6 +112,11 @@ tools:
       Returns each lap's consumption (% of race budget), the running cumulative,
       and the field average for that lap. Use this to assess whether the car
       is over- or under-spending energy versus the field at this point in the race.
+      
+      IMPORTANT data semantics: percent_consumed is normalized so each car's
+      race total sums to exactly 100. Mid-race deltas vs the field are real
+      signal; comparisons at or near the final lap converge to 100 for
+      everyone by construction and mean nothing.
     parameters:
       - name: car_number
         type: integer
@@ -315,6 +320,46 @@ tools:
       WHERE l.lap_num = @lap_number
       ORDER BY l.position
 
+  get_lap_time_windows:
+    kind: bigquery-sql
+    source: bq-fe-race10
+    description: |
+      Lap-number ↔ wall-clock mapping for a car: each lap's start and end in
+      nanoseconds since epoch, plus the lap time. Use this to convert event
+      timestamps (from get_overtakes_involving, get_am_armings,
+      get_am_activations, get_recent_race_control) into lap numbers, or to
+      build a time window covering specific laps. One call replaces ad-hoc
+      SQL against the laps table.
+    parameters:
+      - name: car_number
+        type: integer
+        description: "Car number whose lap clock to use (laps start at slightly different times per car; use car 13 for our reference frame)"
+    statement: |
+      SELECT
+        lap_num,
+        start_time AS lap_start_ns,
+        start_time + (time * 1000000) AS lap_end_ns,
+        time AS lap_time_ms
+      FROM `fe_race10.laps`
+      WHERE car_number = @car_number
+      ORDER BY lap_num
+  
+  bigquery_list_table_ids:
+    kind: bigquery-list-table-ids
+    source: bq-fe-race10
+    description: |
+      List the tables available in a BigQuery dataset. Use with
+      dataset 'fe_race10' to discover what race data exists before
+      writing SQL with execute_sql_bq.
+
+  bigquery_get_table_info:
+    kind: bigquery-get-table-info
+    source: bq-fe-race10
+    description: |
+      Get the schema (columns, types, descriptions) of a BigQuery table.
+      Use with dataset 'fe_race10' before writing SQL with execute_sql_bq —
+      never guess column names.
+  
   execute_sql_bq:
     kind: bigquery-execute-sql
     source: bq-fe-race10
@@ -322,14 +367,21 @@ tools:
       Escape hatch: run a read-only SELECT query against the fe_race10 dataset.
       Use this only when the curated tools above can't answer the question.
 
-      Available tables:
-        drivers, startgrid, laps, attack, energy_per_lap,
-        racecontrol_classified, event_stream, telemetry,
-        top_speed_per_lap,
-        career_driver, career_race
+      Schema discovery: do NOT guess table or column names. Call
+      bigquery_list_table_ids (dataset 'fe_race10') and
+      bigquery_get_table_info first, then write the query.
 
-      Available views:
-        v_laps_with_driver, v_am_with_driver, v_overtakes
+      Data semantics the schema won't tell you:
+        - laps.top_speed is broken (always 0). Use top_speed_per_lap or
+          get_top_speed_history instead.
+        - All time columns (event_stream.t, laps.start_time,
+          attack.eth_arrival_time, telemetry.time,
+          racecontrol_classified.time) are INT64 nanoseconds since epoch.
+          Compare directly — no UNIX_MICROS or TIMESTAMP_MICROS.
+        - energy_per_lap.percent_consumed is normalized: each car's race
+          total sums to exactly 100. Mid-race field comparisons are signal;
+          end-of-race comparisons are meaningless by construction.
+        - telemetry has 1.28M rows — always filter on car_number.
 
       Important data notes:
         - laps.top_speed is broken (always 0). Use top_speed_per_lap instead.
@@ -354,4 +406,7 @@ toolsets:
     - get_overtakes_involving
     - get_driver_career_stats
     - get_field_position_at_lap
+    - get_lap_time_windows
+    - bigquery_list_table_ids
+    - bigquery_get_table_info
     - execute_sql_bq

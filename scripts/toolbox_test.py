@@ -58,6 +58,15 @@ TESTS = [
 
     ("execute_sql_bq",
      {"sql": "SELECT COUNT(*) AS n FROM `fe_race10.event_stream`"}),
+     
+     ("get_lap_time_windows",
+     {"car_number": 13}),
+
+    ("bigquery_list_table_ids",
+     {"dataset": "fe_race10"}),
+
+    ("bigquery_get_table_info",
+     {"dataset": "fe_race10", "table": "laps"}),
 ]
 
 
