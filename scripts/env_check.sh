@@ -64,7 +64,7 @@ fi
 
 echo ""
 echo "=== Data bucket access ==="
-if gsutil ls gs://class-demo/formula-e/r10/simulator/frames_v1.jsonl.gz >/dev/null 2>&1; then
+if gsutil ls gs://class-demo/formula-e/r10/simulator/frames_v2.jsonl.gz >/dev/null 2>&1; then
     pass "can read gs://class-demo/formula-e/"
 else
     miss "cannot read gs://class-demo/formula-e/" "bucket owner needs to grant access to your account or project"
