@@ -61,10 +61,16 @@ class TriggerType(str, Enum):
 
 
 class TriggerCandidate(BaseModel):
-    """One scored reason to speak. Caller fires the best one above threshold."""
+    """One scored reason to speak. Caller fires the best one above threshold.
+
+    must_say marks moments the engineer cannot stay silent on (our own AM
+    transitions, critical race control, RC naming us). The scorer CLASSIFIES;
+    the caller decides what must_say buys (a shorter debounce, typically).
+    """
     trigger_type: TriggerType
     score: int
     reason: str
+    must_say: bool = False
     events: list[dict] = Field(default_factory=list)  # triggering event payloads
 
 
@@ -136,6 +142,7 @@ def score(
                     trigger_type=TriggerType.EVENT_REACTION,
                     score=SCORE_OUR_AM_ACTIVATED,
                     reason="our attack mode activated",
+                    must_say=True,
                     events=[payload],
                 ))
             elif _is_neighbor(state, our_state, e.car_number):
@@ -152,6 +159,7 @@ def score(
                     trigger_type=TriggerType.EVENT_REACTION,
                     score=SCORE_OUR_AM_DEACTIVATED,
                     reason="our attack mode finished",
+                    must_say=True,
                     events=[payload],
                 ))
 
@@ -169,6 +177,7 @@ def score(
                     trigger_type=TriggerType.EVENT_REACTION,
                     score=sev,
                     reason=f"race control: {text}",
+                    must_say=sev >= 88,  # safety car/red/chequered, or names us
                     events=[payload],
                 ))
 
@@ -196,7 +205,7 @@ def score(
                     f"(P{prev_our_position} -> P{our_state.position})"),
         ))
 
-    candidates.sort(key=lambda c: c.score, reverse=True)
+    candidates.sort(key=lambda c: (c.must_say, c.score), reverse=True)
     return candidates
 
 

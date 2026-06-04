@@ -2,13 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 7 complete — scorer + trigger harness validated on laps 1-10; chunk 8 work order drafted)
+**Last updated:** 2026-06-04 (chunk 8 complete — reasoning iteration done; all five work-order items closed, fact-check passed against ground truth)
 
 ---
 
 ## Where we are
 
-Chunks 1–7 complete. The agent now decides when to speak: deterministic significance scorer (shared/scorer.py) + local trigger harness (scripts/local_test.py) validated against laps 1-10 on the live replay. The lap-3 AM cluster — the demo's money moment — fires as a single coherent radio call with real strategic content. Next: chunk 8, reasoning iteration, working the graded defect backlog below.
+Chunks 1–8 complete. The reasoning layer is demo-grade: per-type debounce with a pending must-say hold (every AM moment announced, with correct per-scenario durations), hard tool-budget ceiling (validated in anger — it killed a malformed-SQL wander), latency in the 8-13s band, coaching filler scrubbed, and a line-by-line fact-check against BQ ground truth with every end-of-lap-anchored claim exact — including live narration of the lap-7→9 attack-loop detour (P1 → activates → P3). Next: chunk 9, the frontend service.
 
 ---
 
@@ -180,19 +180,21 @@ Fixed end-to-end:
 - **Validated, laps 1-10 at 2x replay:** lap-3 AM cluster fired as ONE call ("five cars just activated... Evans and Vandoorne are holding off. Stay in the train") — detector saw the full 12-activation wave; lap summary template adherence solid (9.2s, 1 tool call); persona held across all calls; 429 drop handled gracefully mid-run.
 - **Quota reality:** Qwiklabs shared Gemini quota can 429 through 10 retries at 5x replay trigger density. Mitigations: 2x replay for trigger development (5x stays fine for Q&A), harness drop-don't-crash, max_delay bumped 4->8s.
 
-### Chunk 8 work order (graded from live runs)
+### Chunk 8 — Reasoning iteration ✅ (all five work-order items closed)
 
-1. Per-type debounce policy — a flat 15s window suppressed MUST-SAY moments (our own AM activation, score 85!) and starves cluster/summary calls behind each other. Own-car AM should pierce; guarantee a summary every N laps.
-2. Tool-budget enforcement — the prompt's 2-call budget was ignored once (5 calls, 32.3s). Consider hard enforcement or prompt strengthening.
-3. Latency: 9-20s per call is fine for the 1x demo; kill the 30s+ tail.
-4. Content polish: occasional coaching filler ("Focus on your rhythm"); verify energy-delta sign conventions in calls; per-lap summary wording against template.
-5. Fact-check pass on a full laps 1-10 transcript against ground truth (the chunk 8 core loop, using --verbose + agent_chat).
+1. **Per-type debounce** ✅ — must-say candidates (our AM, critical RC) pierce to `--must-say-gap` (5s) AND are HELD until deliverable (pending slot, capacity 1, fresh snapshot at delivery, survives dropped calls, 25 race-s TTL). Without the hold, a gap-blocked must-say evaporated — per-event rules score new events only. `--summary-every 2` guarantees summaries; `[OVERDUE]` outranks normal events. Validated: all three AM moments in the stint announced, with correct per-scenario durations ("sixty seconds" / "three minutes" — scenario 1 short-first).
+2. **Tool budget** ✅ — three layers: hardened prompt language, `RunConfig(max_llm_calls=4)` per trigger (breach raises `LlmCallsLimitExceededError`), drop-on-breach via safe_fire. Fired in anger once: killed a 4-call wander that had guessed SQL columns (skipping discovery under pressure) — correct outcome, a late call is worthless.
+3. **Latency** ✅ — typical 8-13s, summaries ~10s; remaining 18-26s outliers correlate with quota-side slowness (2 tool calls), not tool wandering. Acceptable for the 1× demo.
+4. **Filler scrub** ✅ — persona rule: instructions must be CONCRETE (target, action, place) or OMITTED; banned-phrase list. Validated clean across a full stint. Finding: prompt EXAMPLES leak as templates ("lift and coast into turn six" / "defend the inside of one" echo the prompt's examples) — plausible engineer-speak, accepted for demo, logged.
+5. **Fact-check vs ground truth** ✅ — DAC end-of-lap positions laps 1-12 (P6,6,6,6,3,2,1,3,2,1,1,1): every end-of-lap-anchored claim in the transcripts exact, including the attack-loop detour narration (leading lap 7 → activates → P3 at the lap-8 line) and both AM durations. Safety car ~lap 11-12 confirmed via lap times (76s/102s). Summaries describe "now" (a few seconds into the next lap), not the line — by design. One ambiguous mid-lap claim led to the snapshot echo in verbose mode, so future grading is decidable.
+
+Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1, MUST-SAY 3}, suppressed 31, dropped 1 (budget ceiling).
 
 ---
 
 ## In progress
 
-**Chunk 8 — reasoning iteration.** Working the chunk 8 work order (see Built so far) against laps 1-10: debounce policy, tool budgets, latency tail, content polish, full fact-check pass. Instruments: `local_test.py --verbose` for trigger flow, `agent_chat.py` for targeted Q&A. Where most of the value lands.
+**Chunk 9 — frontend service.** FastAPI + websocket + Firestore reader + browser UI (text-only; TTS is chunk 10). Reuses shared/scorer.py, the trigger policy and prompt builders from local_test.py, and the async Runner pattern — the harness loop becomes a background task pushing state + radio calls over a websocket.
 
 ---
 
@@ -200,7 +202,6 @@ Fixed end-to-end:
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 8 | **Reasoning iteration** | Prompt and tool refinements until laps 1–10 reasoning is good. *Where most of the value lands.* |
 | 9 | Frontend (text-only) | `frontend/` — FastAPI + websocket + Firestore reader + browser UI. No Pub/Sub here; State Writer owns ingestion. |
 | 10 | TTS wired in | Chirp 3 British male, 1.15× rate, browser playback |
 | 11 | STT + push-to-talk | MediaRecorder + Cloud STT v2 |
@@ -320,6 +321,8 @@ These didn't make the build doc but matter for downstream work:
 
 **Retirements in R10:** car 7 (GUE) lap 10, car 23 (FEN) lap 24. Both matter for field-size assertions and per-lap joins.
 
+**Frame schema semantics worth teaching:** `attack_mode.remaining_budget_s` decrements on DEACTIVATION, not continuously — a car mid-activation still shows its pre-activation budget. Calls like "180 seconds remaining" mid-AM are faithful to the data. Also: prompt examples become model vocabulary — concrete examples in persona/trigger prompts ("turn six") reappear verbatim in calls; rotate or genericize examples if this matters.
+
 **Three-service architecture rationale:**
 - Two services (frontend owns ingestion + UX) would have collapsed concerns and made the lab harder to teach
 - Three services (Writer / Agent / Frontend) gives the hackathon three clean team handoff points: ingestion patterns, agent reasoning, UX orchestration
@@ -345,7 +348,7 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 6.5 — overtake identity remediation (v_overtakes rebuild, tool rewrite, frames_v3)
 - [x] Re-verified DAC battle list against rebuilt v_overtakes — CAS and JEV top rivals (11 each); original DEN finding confirmed by grid coincidence
 - [x] Chunk 7 — significance scorer + local harness (pure scorer in shared/, snapshot-passing trigger loop, laps 1-10 validated)
-- [ ] Chunk 8 — reasoning iteration on laps 1–10
+- [x] Chunk 8 — reasoning iteration (per-type debounce + must-say hold, 3-layer tool budget, filler scrub, fact-check passed)
 - [ ] Chunk 9 — frontend (text-only)
 - [ ] Chunk 10 — TTS
 - [ ] Chunk 11 — STT + push-to-talk
