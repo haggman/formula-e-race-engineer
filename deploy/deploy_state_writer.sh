@@ -147,9 +147,12 @@ gcloud beta services identity create \
 echo "    service agent: $PUBSUB_SA"
 
 # --- Grant Pub/Sub SA permissions to invoke Cloud Run + use the SA token ---
-echo ">>> Granting Pub/Sub SA invoker on Cloud Run service..."
+# OIDC push auth: Pub/Sub mints a token AS the push-auth SA (fe-state-writer-sa),
+# so THAT identity is what Cloud Run sees — it needs run.invoker. The Pub/Sub
+# service agent only mints the token (tokenCreator below); it never invokes.
+echo ">>> Granting push-auth SA invoker on Cloud Run service..."
 gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
-    --member="serviceAccount:${PUBSUB_SA}" \
+    --member="serviceAccount:${SA_EMAIL}" \
     --role="roles/run.invoker" \
     --region="$REGION" \
     --project="$PROJECT_ID" \

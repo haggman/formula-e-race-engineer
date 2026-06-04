@@ -2,7 +2,7 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-03 (chunk 5 design — three-service split)
+**Last updated:** 2026-06-04 (chunk 5 — Pub/Sub push path verified, OIDC invoker fix)
 
 ---
 
@@ -141,7 +141,7 @@ env_check: 14/14 pass. bq_setup.py re-ran cleanly with env-driven config.
 
 ## In progress
 
-**Chunk 5 — data plane.** Firestore Native db created (`(default)` in us-central1), agent folder skeleton in place at `agent/race_engineer/tools/`. Architecture pivoted to three services. Code for shared models, State Writer service, agent frame tools, seed + test scripts is the next deliverable.
+**Chunk 5 — data plane, Pass 4 of 4.** Built and verified: `shared/` models, State Writer deployed to Cloud Run (`fe-state-writer`, OIDC-authenticated push), Firestore Native with 3 DESC composite indexes on `race_events`, frame tools + state client, seed + test scripts (6/6 local tests pass). End-to-end Pub/Sub path verified 2026-06-04: published sample frame → push sub → State Writer 200 → RaceState + 4 events in Firestore, confirmed via `/status`. Remaining: Pass 4 — deploy the simulator (companion repo) and confirm live 1 Hz frames flow simulator → topic → Firestore → frame tools.
 
 ---
 
@@ -228,6 +228,13 @@ These didn't make the build doc but matter for downstream work:
 - Use strict `==` pins only where the version *must* match an external surface (toolbox-core matches the deployed Toolbox server's protocol; google-adk's 1.x API is the agent contract)
 - Everything else uses `>=` floors so pip can resolve a coherent transitive matrix
 - Aggressive strict pinning across the requirements file causes `ResolutionImpossible` errors when transitive deps (protobuf, grpcio, google-api-core) want incompatible ranges
+
+**Pub/Sub OIDC push auth — invoker goes on the push-auth SA (Fork 4 gotcha candidate):**
+- With `--push-auth-service-account=SA`, Pub/Sub mints the OIDC token *as that SA* — so Cloud Run checks `roles/run.invoker` on **that identity**, not on the Pub/Sub service agent.
+- Correct bindings: (1) push-auth SA gets `run.invoker` on the service; (2) Pub/Sub service agent gets `iam.serviceAccountTokenCreator` *on* the push-auth SA (it mints the token, never invokes).
+- We initially bound invoker to the service agent → hard 403 at the Cloud Run front door (request never reaches the container, only visible in request logs). Easy mistake because "grant the service agent invoker" *is* the right pattern for some other GCP push integrations.
+- IAM changes take 1–3 min to propagate to push delivery; Pub/Sub's retry backoff re-delivers automatically once the binding lands (within the 600s `messageRetentionDuration`).
+- Fixed in `deploy/deploy_state_writer.sh` (binding now targets `${SA_EMAIL}`, with explanatory comment).
 
 **Three-service architecture rationale:**
 - Two services (frontend owns ingestion + UX) would have collapsed concerns and made the lab harder to teach
