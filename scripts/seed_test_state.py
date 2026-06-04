@@ -22,6 +22,9 @@ Usage:
 """
 from __future__ import annotations
 
+from shared.script_env import require_venv
+require_venv()
+
 import argparse
 import json
 import os

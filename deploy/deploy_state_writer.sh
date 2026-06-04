@@ -76,12 +76,48 @@ else
 fi
 
 # --- Deploy Cloud Run service ---
-# We need to deploy from the repo root because the Dockerfile references
-# both state_writer/ and shared/.
-echo ">>> Deploying Cloud Run service from $REPO_ROOT..."
+# --- Build the container image with Cloud Build ---
+echo ">>> Building container image..."
+
+# Use Artifact Registry repo named "fe-services" in our region.
+# Idempotent: create if missing.
+REPO_NAME="${REPO_NAME:-fe-services}"
+if ! gcloud artifacts repositories describe "$REPO_NAME" \
+        --location="$REGION" \
+        --project="$PROJECT_ID" >/dev/null 2>&1; then
+    gcloud artifacts repositories create "$REPO_NAME" \
+        --location="$REGION" \
+        --repository-format=docker \
+        --description="Formula E race engineer services" \
+        --project="$PROJECT_ID"
+    echo "    created Artifact Registry repo $REPO_NAME"
+else
+    echo "    repo $REPO_NAME exists"
+fi
+
+IMAGE_TAG="$(date -u +%Y%m%d-%H%M%S)"
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/state-writer:${IMAGE_TAG}"
+
+CB_CONFIG="$(mktemp)"
+cat > "$CB_CONFIG" <<EOF
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', '${IMAGE}', '-f', 'state_writer/Dockerfile', '.']
+images: ['${IMAGE}']
+EOF
+
+gcloud builds submit "$REPO_ROOT" \
+    --config="$CB_CONFIG" \
+    --project="$PROJECT_ID"
+
+rm -f "$CB_CONFIG"
+
+echo "    built and pushed: $IMAGE"
+
+# --- Deploy Cloud Run service ---
+echo ">>> Deploying Cloud Run service..."
 gcloud run deploy "$SERVICE_NAME" \
-    --source="$REPO_ROOT" \
-    --dockerfile="state_writer/Dockerfile" \
+    --image="$IMAGE" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
     --service-account="$SA_EMAIL" \
@@ -97,26 +133,33 @@ gcloud run deploy "$SERVICE_NAME" \
 
 URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
 
-# --- Create Pub/Sub service account that can invoke this Cloud Run service ---
-# Pub/Sub push needs to authenticate to private Cloud Run.
+# --- Trigger Pub/Sub service agent provisioning ---
+# The service agent (service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com)
+# is created on first Pub/Sub use in a project. Enabling the API alone doesn't
+# materialize it. Force-create here so IAM bindings below can target it.
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 PUBSUB_SA="service-${PROJECT_NUMBER}@gcp-sa-pubsub.iam.gserviceaccount.com"
 
+echo ">>> Provisioning Pub/Sub service agent..."
+gcloud beta services identity create \
+    --service=pubsub.googleapis.com \
+    --project="$PROJECT_ID" >/dev/null
+echo "    service agent: $PUBSUB_SA"
+
+# --- Grant Pub/Sub SA permissions to invoke Cloud Run + use the SA token ---
 echo ">>> Granting Pub/Sub SA invoker on Cloud Run service..."
 gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
     --member="serviceAccount:${PUBSUB_SA}" \
     --role="roles/run.invoker" \
     --region="$REGION" \
     --project="$PROJECT_ID" \
-    --quiet >/dev/null
+    --quiet --verbosity=error
 
-# We also need a service account that Pub/Sub uses to call our service.
-# Reusing the SA we already have is the simplest approach.
 gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
     --member="serviceAccount:${PUBSUB_SA}" \
     --role="roles/iam.serviceAccountTokenCreator" \
     --project="$PROJECT_ID" \
-    --quiet >/dev/null
+    --quiet --verbosity=error
 
 # --- Create or update the push subscription ---
 echo ">>> Configuring Pub/Sub push subscription..."

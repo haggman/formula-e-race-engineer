@@ -9,6 +9,9 @@ Verifies that DAC is at P2 (per the seeded sample), MOR is in AM, etc.
 """
 from __future__ import annotations
 
+from shared.script_env import require_venv
+require_venv()
+
 import sys
 
 # We import via the agent package so the path mirrors how ADK will call.
