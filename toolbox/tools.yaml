@@ -240,31 +240,33 @@ tools:
     kind: bigquery-sql
     source: bq-fe-race10
     description: |
-      Overtakes that involved a specific car — either the car overtook someone
-      else, or was overtaken. Returns time, who overtook whom, and the
-      pre-parsed human-readable summary. Use this to assess recent battles
-      around our driver.
+      Overtakes involving a specific car — either as the car making/losing
+      the move or as the other participant. Both participants are resolved
+      to real car numbers and driver codes. Returns time, both drivers,
+      position_change from the subject's perspective (negative = subject
+      gained the place), and a human-readable summary. Use this to assess
+      battles around a driver.
     parameters:
       - name: car_number
         type: integer
-        description: "Car number"
-      - name: car_pattern
-        type: string
-        description: "LIKE pattern with the car number, e.g. '%#13%' for car 13. Build as '%#' + str(car_number) + '%'."
+        description: "Real car number, e.g. 13 for our driver"
       - name: through_time_ns
         type: integer
-        description: "Wall-clock time in nanoseconds since epoch."
+        description: "Wall-clock time in nanoseconds since epoch (2024 race clock). Only events at or before this time."
     statement: |
       SELECT
-        t AS time_ns,
-        car_number AS overtaking_car,
-        human_summary,
-        attrs_json
-      FROM `fe_race10.event_stream`
-      WHERE source = 'overtake'
-        AND t <= @through_time_ns
-        AND (car_number = @car_number OR human_summary LIKE @car_pattern)
-      ORDER BY t DESC
+        event_time AS time_ns,
+        car_number,
+        driver_short_name,
+        other_car_number,
+        other_driver_short_name,
+        position_change,
+        at_loop,
+        human_summary
+      FROM `fe_race10.v_overtakes`
+      WHERE (car_number = @car_number OR other_car_number = @car_number)
+        AND event_time <= @through_time_ns
+      ORDER BY event_time DESC
       LIMIT 50
 
   get_driver_career_stats:

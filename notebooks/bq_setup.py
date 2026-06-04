@@ -259,11 +259,35 @@ VIEWS = {
         LEFT JOIN `{p}.{d}.drivers` d USING (car_number)
     """,
     "v_overtakes": """
-        SELECT e.t AS event_time, e.car_number, d.driver_short_name, d.team,
-               e.attrs_json, e.human_summary
+        -- NOTE: in event_stream overtake rows, car_number is the subject's
+        -- GRID POSITION, while attrs_json.other_car is a real car number.
+        -- (Verified by position-adjacency scoring, 2026-06-04.) This view
+        -- resolves both to real cars and regenerates human_summary; the
+        -- source summary strings embed the grid IDs and must not be used.
+        SELECT
+            e.t AS event_time,
+            g.car_number,
+            d.driver_short_name,
+            d.team,
+            CAST(JSON_VALUE(e.attrs_json, '$.other_car') AS INT64) AS other_car_number,
+            od.driver_short_name AS other_driver_short_name,
+            CAST(JSON_VALUE(e.attrs_json, '$.position_change') AS INT64) AS position_change,
+            CAST(JSON_VALUE(e.attrs_json, '$.at_loop') AS INT64) AS at_loop,
+            CONCAT(
+                d.driver_short_name, ' (#', CAST(g.car_number AS STRING), ') ',
+                IF(CAST(JSON_VALUE(e.attrs_json, '$.position_change') AS INT64) < 0,
+                   'passed', 'lost place to'),
+                ' ', od.driver_short_name, ' (#',
+                JSON_VALUE(e.attrs_json, '$.other_car'), ')'
+            ) AS human_summary
         FROM `{p}.{d}.event_stream` e
-        LEFT JOIN `{p}.{d}.drivers` d USING (car_number)
+        JOIN `{p}.{d}.startgrid` g ON g.position = e.car_number
+        LEFT JOIN `{p}.{d}.drivers` d ON d.car_number = g.car_number
+        LEFT JOIN `{p}.{d}.drivers` od
+            ON od.car_number = CAST(JSON_VALUE(e.attrs_json, '$.other_car') AS INT64)
         WHERE e.source = 'overtake'
+          AND CAST(JSON_VALUE(e.attrs_json, '$.position_change') AS INT64) != 0
+          AND JSON_VALUE(e.attrs_json, '$.other_car') IS NOT NULL
     """,
 }
 for view_name, sql_t in VIEWS.items():
