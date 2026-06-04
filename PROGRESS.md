@@ -2,13 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunks 6 + 6.5 complete — agent live with 17 tools; overtake identity bug found and fixed end-to-end)
+**Last updated:** 2026-06-04 (chunk 7 complete — scorer + trigger harness validated on laps 1-10; chunk 8 work order drafted)
 
 ---
 
 ## Where we are
 
-Chunks 1–6.5 complete. The ADK agent is alive and reasoning against the live replay: 4 frame tools (Firestore "now") + 13 Toolbox tools (BigQuery history + schema discovery), persona prompt in place, terminal chat harness with full tool-call visibility. Along the way, live testing exposed and we fixed a foundational data bug: overtake events' car_number was actually GRID POSITION (frames_v3 + v_overtakes rebuild + tool rewrite). Next: chunk 7, significance scorer + local trigger harness.
+Chunks 1–7 complete. The agent now decides when to speak: deterministic significance scorer (shared/scorer.py) + local trigger harness (scripts/local_test.py) validated against laps 1-10 on the live replay. The lap-3 AM cluster — the demo's money moment — fires as a single coherent radio call with real strategic content. Next: chunk 8, reasoning iteration, working the graded defect backlog below.
 
 ---
 
@@ -172,11 +172,27 @@ Fixed end-to-end:
 - `frames_v3.jsonl.gz` (schema 1.2) — standalone notebook Cell 14 remaps overtake subjects through the grid map; validated (716 remapped, 0 unmappable, all 7 cars >22 now appear as subjects, DAC tops involvement at 51)
 - Firestore reset + clean v3 replay; `test_frame_tools.py --live` green
 
+### Chunk 7 — Significance scorer + local trigger harness ✅
+
+- `shared/scorer.py` — PURE deterministic scoring (no I/O, no clocks; caller owns debounce). Tunable weights at top. Rules: our overtakes both directions (passed=90 > passing=80), our AM transitions (85/75), field AM cluster via caller-supplied 30s lookback (75, the lap-3 detector), neighbor AM activation (65), RC severity by category prefix (bumped to 88 if the message names us), net position swing vs previous check (60+5/place). Guard: the source data's one self-overtake glitch row (subject==other==13) never scores. Lives in shared/ so the chunk 9 frontend imports it unchanged.
+- `scripts/local_test.py` — async poll → score → fire loop on agent_chat's Runner pattern. Fresh session per proactive call (per locked decision); the TRIGGERING SNAPSHOT rides in the prompt (state + events, authoritative for the call) so the agent doesn't re-fetch a moved-on world — proactive calls run 1-2 tools instead of 16. Lap summaries scheduled on lap change (completed lap >= 1; lap 0->1 is the green flag), never scored. Wall-clock debounce (15s default — race-time debounce breaks at replay speed). Failed calls DROP with a 5s cooldown (a late radio call is worse than a missed one); drops counted, loop survives. Triggers processed one at a time — an engineer has one mouth.
+- Trigger prompt builders appended to prompts.py (event reaction + lap summary, both with a stated 2-tool budget).
+- **Validated, laps 1-10 at 2x replay:** lap-3 AM cluster fired as ONE call ("five cars just activated... Evans and Vandoorne are holding off. Stay in the train") — detector saw the full 12-activation wave; lap summary template adherence solid (9.2s, 1 tool call); persona held across all calls; 429 drop handled gracefully mid-run.
+- **Quota reality:** Qwiklabs shared Gemini quota can 429 through 10 retries at 5x replay trigger density. Mitigations: 2x replay for trigger development (5x stays fine for Q&A), harness drop-don't-crash, max_delay bumped 4->8s.
+
+### Chunk 8 work order (graded from live runs)
+
+1. Per-type debounce policy — a flat 15s window suppressed MUST-SAY moments (our own AM activation, score 85!) and starves cluster/summary calls behind each other. Own-car AM should pierce; guarantee a summary every N laps.
+2. Tool-budget enforcement — the prompt's 2-call budget was ignored once (5 calls, 32.3s). Consider hard enforcement or prompt strengthening.
+3. Latency: 9-20s per call is fine for the 1x demo; kill the 30s+ tail.
+4. Content polish: occasional coaching filler ("Focus on your rhythm"); verify energy-delta sign conventions in calls; per-lap summary wording against template.
+5. Fact-check pass on a full laps 1-10 transcript against ground truth (the chunk 8 core loop, using --verbose + agent_chat).
+
 ---
 
 ## In progress
 
-**Chunk 7 — significance scorer + local harness.** `scripts/local_test.py`: deterministic scorer reads Firestore state + events, fires agent on triggers (significant event / end-of-lap / debounced 15s), prints transcripts. Builds on `agent_chat.py`'s async Runner pattern. Validate against laps 1-10.
+**Chunk 8 — reasoning iteration.** Working the chunk 8 work order (see Built so far) against laps 1-10: debounce policy, tool budgets, latency tail, content polish, full fact-check pass. Instruments: `local_test.py --verbose` for trigger flow, `agent_chat.py` for targeted Q&A. Where most of the value lands.
 
 ---
 
@@ -184,7 +200,6 @@ Fixed end-to-end:
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 7 | Significance scorer + local harness | `scripts/local_test.py` — reads Firestore state, scores frames, calls agent on triggers, prints + plays TTS. Validate against laps 1–10. |
 | 8 | **Reasoning iteration** | Prompt and tool refinements until laps 1–10 reasoning is good. *Where most of the value lands.* |
 | 9 | Frontend (text-only) | `frontend/` — FastAPI + websocket + Firestore reader + browser UI. No Pub/Sub here; State Writer owns ingestion. |
 | 10 | TTS wired in | Chirp 3 British male, 1.15× rate, browser playback |
@@ -329,7 +344,7 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 6 — agent definition (4 passes: skeleton, Toolbox, discovery tools, persona; async chat harness)
 - [x] Chunk 6.5 — overtake identity remediation (v_overtakes rebuild, tool rewrite, frames_v3)
 - [x] Re-verified DAC battle list against rebuilt v_overtakes — CAS and JEV top rivals (11 each); original DEN finding confirmed by grid coincidence
-- [ ] Chunk 7 — significance scorer + local harness
+- [x] Chunk 7 — significance scorer + local harness (pure scorer in shared/, snapshot-passing trigger loop, laps 1-10 validated)
 - [ ] Chunk 8 — reasoning iteration on laps 1–10
 - [ ] Chunk 9 — frontend (text-only)
 - [ ] Chunk 10 — TTS
