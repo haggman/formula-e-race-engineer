@@ -138,7 +138,7 @@ def main():
             "PROJECT_ID"
         )
         if not project_id:
-            print("ERROR: PROJECT_ID env var required. Run: source ./activate",
+            print("ERROR: PROJECT_ID env var required. Run: source activate.sh",
                   file=sys.stderr)
             sys.exit(1)
         seed_via_firestore(project_id)

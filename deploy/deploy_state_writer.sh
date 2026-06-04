@@ -3,7 +3,7 @@
 #
 # Idempotent: re-running updates the service and re-binds the subscription.
 #
-# Required env vars (set by sourcing ./activate):
+# Required env vars (set by sourcing activate.sh):
 #   PROJECT_ID, REGION
 
 set -euo pipefail
@@ -14,11 +14,11 @@ SUBSCRIPTION_NAME="${SUBSCRIPTION_NAME:-fe-state-writer-sub}"
 SA_NAME="${SA_NAME:-fe-state-writer-sa}"
 
 if [[ -z "${PROJECT_ID:-}" ]]; then
-    echo "ERROR: PROJECT_ID env var required. Run: source ./activate" >&2
+    echo "ERROR: PROJECT_ID env var required. Run: source activate.sh" >&2
     exit 1
 fi
 if [[ -z "${REGION:-}" ]]; then
-    echo "ERROR: REGION env var required. Run: source ./activate" >&2
+    echo "ERROR: REGION env var required. Run: source activate.sh" >&2
     exit 1
 fi
 

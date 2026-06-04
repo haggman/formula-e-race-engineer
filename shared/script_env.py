@@ -14,7 +14,7 @@ import sys
 def require_venv() -> None:
     """Fail fast with a friendly message if the project venv isn't active.
 
-    Catches the common "forgot to source ./activate in a new tab" failure
+    Catches the common "forgot to source activate.sh in a new tab" failure
     mode — produces a clear error instead of a downstream ModuleNotFoundError.
     """
     if "VIRTUAL_ENV" not in os.environ:
@@ -22,7 +22,7 @@ def require_venv() -> None:
             "\n"
             "ERROR: The project virtual environment is not active.\n"
             "\n"
-            "  Fix: source ./activate (from the repo root)\n"
+            "  Fix: source activate.sh (from the repo root)\n"
             "\n"
             "This script needs the venv to import shared/, agent/, "
             "google-cloud-firestore, etc.\n"

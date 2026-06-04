@@ -8,10 +8,17 @@ Pub/Sub push delivers each frame as a base64-encoded JSON payload. We decode,
 validate against the shared Pydantic models, then:
   1. Overwrite race_states/{race_id} with the current RaceState
   2. Write each event in frame.events[] as a separate doc in race_events/
+
+Idempotency: event docs use DETERMINISTIC IDs derived from the event content
+(race_id + race_time_s + event_type + car_number + data hash). Pub/Sub
+at-least-once redelivery and full race replays therefore overwrite the same
+docs instead of appending duplicates. This is the canonical answer to
+at-least-once delivery: make the write idempotent, not the delivery exact.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -131,13 +138,30 @@ async def manual_ingest(request: Request):
     return {"ok": True, "race_time_s": frame_dict.get("race_time_s")}
 
 
+def event_doc_id(event: Event) -> str:
+    """Deterministic Firestore doc ID for an event.
+
+    Same event content → same ID → idempotent writes. The data hash
+    disambiguates distinct events that share (time, type, car) — e.g. two
+    different race_control messages in the same second.
+
+    Format: {race_id}_{race_time_s}_{event_type}_{car_or_x}_{sha1[:12]}
+    """
+    payload = json.dumps(
+        event.data, sort_keys=True, separators=(",", ":"), default=str
+    )
+    digest = hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
+    car = event.car_number if event.car_number is not None else "x"
+    return f"{event.race_id}_{event.race_time_s}_{event.event_type.value}_{car}_{digest}"
+
+
 def write_frame(frame_dict: dict[str, Any]) -> None:
     """Parse a frame dict, validate via Pydantic, write RaceState + Events.
 
-    Idempotent on RaceState (overwrite). Events are appended; duplicates would
-    appear if the same frame is delivered twice. For Fork 2 we accept that —
-    Pub/Sub at-least-once delivery means rare duplicates but the agent doesn't
-    care for laps-1-10 demo purposes.
+    Fully idempotent: RaceState is an overwrite, and Event docs use
+    deterministic IDs (see event_doc_id), so re-delivering the same frame —
+    whether via Pub/Sub retry or a full race replay — converges to the same
+    Firestore state instead of accumulating duplicates.
     """
     # Stamp wall-clock ns onto the frame before validating
     if "ts_ns_wall" not in frame_dict:
@@ -156,7 +180,7 @@ def write_frame(frame_dict: dict[str, Any]) -> None:
     db.collection("race_states").document(race_id).set(state_doc)
 
     # ------------------------------------------------------------------
-    # 2) Write any events in this tick to race_events/
+    # 2) Write any events in this tick to race_events/ (idempotent set)
     # ------------------------------------------------------------------
     raw_events = frame_dict.get("events") or []
     if not raw_events:
@@ -172,7 +196,7 @@ def write_frame(frame_dict: dict[str, Any]) -> None:
             logger.warning("skipping malformed event at t=%d: %s (%s)",
                            race_time_s, raw, e)
             continue
-        doc_ref = db.collection("race_events").document()
+        doc_ref = db.collection("race_events").document(event_doc_id(event))
         batch.set(doc_ref, event.model_dump(mode="json"))
         written += 1
 

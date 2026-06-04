@@ -2,7 +2,7 @@
 # Activate the formula-e-race-engineer dev environment.
 #
 # Usage (must use 'source', not bash):
-#     source activate/activate.sh
+#     source activate.sh
 #
 # Idempotent: safe to source multiple times per shell session.
 
@@ -10,7 +10,7 @@
 # Default to us-central1 (matches gs://class-demo bucket region).
 # Override before sourcing if your lab assigns a different region:
 #     export REGION=us-east1
-#     source activate/activate.sh
+#     source activate.sh
 export REGION="${REGION:-us-central1}"
 
 # --- Project ID ---
@@ -67,4 +67,4 @@ echo "  Python:  $(python3 --version)"
 echo "=================================================================="
 echo ""
 echo "To deactivate: 'deactivate'"
-echo "To re-install requirements: 'rm ${STAMP_FILE} && source activate/activate.sh'"
+echo "To re-install requirements: 'rm ${STAMP_FILE} && source activate.sh'"

@@ -5,7 +5,7 @@
 set -euo pipefail
 
 if [[ -z "${REGION:-}" ]]; then
-    echo "ERROR: REGION env var required. Run: source activate/activate.sh" >&2
+    echo "ERROR: REGION env var required. Run: source activate.sh" >&2
     exit 1
 fi
 SA_NAME="${SA_NAME:-fe-toolbox-sa}"

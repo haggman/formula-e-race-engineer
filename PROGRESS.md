@@ -2,17 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 5 — Pub/Sub push path verified, OIDC invoker fix)
+**Last updated:** 2026-06-04 (chunk 5 complete — data plane live end-to-end, frames_v2, idempotent ingestion)
 
 ---
 
 ## Where we are
 
-Chunks 1–4.5 complete. Firestore Native db created in the lab project, agent folder skeleton in place.
-
-Architecture pivoted from two services to **three**: Simulator → **State Writer** (Pub/Sub → Firestore) → Frontend + Agent. Pedagogically cleaner (three teach-points instead of two), enables team parallelism in the hackathon, and gives each service one job. Shared Pydantic models in `shared/` package so State Writer and Agent agree on the contract.
-
-Ready to write chunk 5 code: shared models package, State Writer service, agent frame tools, seed + test scripts.
+Chunks 1–5 complete. The full data plane is live: simulator (frames_v2, 5×) → Pub/Sub → State Writer (idempotent) → Firestore → agent frame tools, all verified against a running replay. Next: chunk 6, the ADK agent definition.
 
 ---
 
@@ -137,11 +133,31 @@ Files added/changed:
 
 env_check: 14/14 pass. bq_setup.py re-ran cleanly with env-driven config.
 
+### Chunk 5 — Data plane (State Writer + frame tools + frames_v2) ✅
+
+The architecture pivot to three services (Simulator → **State Writer** → Firestore ← Agent + Frontend) landed here. Shared Pydantic models in `shared/` are the Firestore contract for both Writer and Agent.
+
+**Built in this repo:**
+- `shared/models.py` — RaceState, CarState, Event, EventType + nested state models (frame schema v1.x)
+- `shared/script_env.py` — `require_venv()` fail-fast guard for scripts
+- `state_writer/` — FastAPI Cloud Run service: Pub/Sub push → validate → Firestore. **Idempotent**: event docs use deterministic IDs (`race_id_raceTime_type_car_dataHash`), so Pub/Sub redelivery and full replays overwrite instead of append
+- `agent/race_engineer/tools/` — `frame_tools.py` (4 tools: current state, recent events, events in range, field AM status) + `state_client.py` (Firestore reader, 1s TTL cache on RaceState)
+- `deploy/deploy_state_writer.sh` — Cloud Build image (bundles `shared/`), Cloud Run deploy, OIDC-authenticated Pub/Sub push subscription
+- `deploy/setup_firestore.sh` — Native-mode DB + 3 DESC composite indexes on `race_events`
+- `scripts/seed_test_state.py` — canonical t=1449 sample frame (direct Firestore or via `/ingest`)
+- `scripts/test_frame_tools.py` — seed mode (exact asserts) + `--live` mode (structural + data-quality asserts incl. nonzero top speeds)
+- `scripts/reset_race_state.py` — wipes RaceState + race_events between replay sessions
+
+**Built in the simulator repo (companion):**
+- `frames_v2.jsonl.gz` (schema 1.1) — notebook Cell 13 post-process: real per-lap top speeds from 20 Hz telemetry (anchor-validated against BQ `top_speed_per_lap`), dropped 532 of 1,248 zero-change overtake events (43% noise). Defaults flipped to v2 in `config.py`/`deploy.sh`; index footer made dynamic.
+
+**Deployed + verified:** `fe-state-writer` and `fe-simulator` on Cloud Run; live 5× replay flowing end-to-end; `test_frame_tools.py --live` green; replay idempotency proven via jump-back (event counts stable).
+
 ---
 
 ## In progress
 
-**Chunk 5 — data plane, Pass 4 of 4.** Built and verified: `shared/` models, State Writer deployed to Cloud Run (`fe-state-writer`, OIDC-authenticated push), Firestore Native with 3 DESC composite indexes on `race_events`, frame tools + state client, seed + test scripts (6/6 local tests pass). End-to-end Pub/Sub path verified 2026-06-04: published sample frame → push sub → State Writer 200 → RaceState + 4 events in Firestore, confirmed via `/status`. Remaining: Pass 4 — deploy the simulator (companion repo) and confirm live 1 Hz frames flow simulator → topic → Firestore → frame tools.
+**Chunk 6 — agent definition.** `agent/race_engineer/agent.py` + `prompts.py`: ADK agent on `gemini-3-flash-preview`, wired to the four frame tools and the deployed MCP Toolbox (11 BQ tools). Validated locally via `adk web` against the live Firestore replay.
 
 ---
 
@@ -149,7 +165,6 @@ env_check: 14/14 pass. bq_setup.py re-ran cleanly with env-driven config.
 
 | # | Chunk | What it produces |
 |---|---|---|
-| **5** | **Data plane** — State Writer + frame tools | `shared/` Pydantic models, `state_writer/` Cloud Run service (Pub/Sub push → Firestore), `agent/race_engineer/tools/` frame tools (read Firestore + 1s TTL cache), seed script, test script. State Writer deployed; live frames flowing simulator → topic → Firestore. |
 | 6 | Agent definition | `agent/race_engineer/agent.py` + `prompts.py` — ADK agent wired to model, Toolbox MCP, and frame tools. `adk web` runs locally against live Firestore data for text chat. |
 | 7 | Significance scorer + local harness | `scripts/local_test.py` — reads Firestore state, scores frames, calls agent on triggers, prints + plays TTS. Validate against laps 1–10. |
 | 8 | **Reasoning iteration** | Prompt and tool refinements until laps 1–10 reasoning is good. *Where most of the value lands.* |
@@ -236,6 +251,18 @@ These didn't make the build doc but matter for downstream work:
 - IAM changes take 1–3 min to propagate to push delivery; Pub/Sub's retry backoff re-delivers automatically once the binding lands (within the 600s `messageRetentionDuration`).
 - Fixed in `deploy/deploy_state_writer.sh` (binding now targets `${SA_EMAIL}`, with explanatory comment).
 
+**Deterministic event IDs = idempotent ingestion (the canonical at-least-once answer):**
+- Pub/Sub is at-least-once; replays re-deliver everything. Auto-ID event docs duplicated on both (seen live: triplicate lap_completed events).
+- Fix: doc ID derived from content — `{race_id}_{race_time_s}_{event_type}_{car|x}_{sha1(data)[:12]}`. Redelivery and replays converge to the same docs.
+- Side effect (feature): byte-identical events in the same frame collapse to one doc.
+- Strong teach point for the lab: make the *write* idempotent, not the delivery exact.
+
+**frames_v1 → frames_v2 (data quality fixes found in live integration):**
+- The broken `laps.top_speed` (always 0) had propagated into frame `lap_completed` events. v2 recovers real values from per-lap MAX of 20 Hz telemetry — same derivation as BQ `top_speed_per_lap`, anchor-validated against DAC laps 1–5 (exact to 0.1 km/h).
+- 532 of 1,248 overtake events (43%) were `position_change=0` noise (no-op side of provisional swaps) — dropped at frames build. Position resolution unaffected.
+- v2 written alongside v1 (never overwrite published artifacts); `schema_version` 1.1; `top_speed_kmh` now float.
+- Simulator `/schema` endpoint returns the file's *midpoint* frame — t=1449, a quiet safety-car tick with empty `events[]`. Not a bug. (Same moment as our canonical seed frame, for the same reason.)
+
 **Three-service architecture rationale:**
 - Two services (frontend owns ingestion + UX) would have collapsed concerns and made the lab harder to teach
 - Three services (Writer / Agent / Frontend) gives the hackathon three clean team handoff points: ingestion patterns, agent reasoning, UX orchestration
@@ -255,7 +282,8 @@ These didn't make the build doc but matter for downstream work:
 - [x] Top_speed cleanup pass — dropped broken column from `get_lap_history`, `get_field_position_at_lap`, and `v_laps_with_driver`; added INT64-ns convention doc to `execute_sql_bq`
 - [x] Chunk 4 — Toolbox to Cloud Run
 - [x] Chunk 4.5 — venv + activate + region-env-var cleanup
-- [ ] Chunk 5 — data plane (shared models, State Writer service, frame tools, seed + test)
+- [x] Chunk 5 — data plane (shared models, State Writer, frame tools, seed + test, frames_v2, idempotent event IDs, reset script)
+- [ ] Cleanup: unify activate references — the file is `activate.sh` at repo root (`source activate.sh`), but `activate.sh`'s own header, `env_check.sh`, `seed_test_state.py`, `state_client.py` error messages, and README variously say `source ./activate` or `source activate/activate.sh`
 - [ ] Chunk 6 — agent definition
 - [ ] Chunk 7 — significance scorer + local harness
 - [ ] Chunk 8 — reasoning iteration on laps 1–10

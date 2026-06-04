@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Verify Cloud Shell environment is ready to build the race engineer agent.
-# Run this AFTER sourcing activate/activate.sh
+# Run this AFTER sourcing activate.sh
 
 set +e  # we want to keep going past failures
 
@@ -13,9 +13,9 @@ note() { echo "  ○ $1"; }
 
 echo ""
 echo "=== Environment activation ==="
-[[ -n "${VIRTUAL_ENV:-}" ]]   && pass "venv active: $VIRTUAL_ENV"   || miss "venv not active"   "run: source activate/activate.sh"
-[[ -n "${PROJECT_ID:-}" ]]    && pass "PROJECT_ID: $PROJECT_ID"     || miss "PROJECT_ID not set" "run: source activate/activate.sh"
-[[ -n "${REGION:-}" ]]        && pass "REGION: $REGION"             || miss "REGION not set"     "run: source activate/activate.sh"
+[[ -n "${VIRTUAL_ENV:-}" ]]   && pass "venv active: $VIRTUAL_ENV"   || miss "venv not active"   "run: source activate.sh"
+[[ -n "${PROJECT_ID:-}" ]]    && pass "PROJECT_ID: $PROJECT_ID"     || miss "PROJECT_ID not set" "run: source activate.sh"
+[[ -n "${REGION:-}" ]]        && pass "REGION: $REGION"             || miss "REGION not set"     "run: source activate.sh"
 
 echo ""
 echo "=== Required tooling ==="

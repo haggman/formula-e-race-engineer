@@ -37,14 +37,13 @@ Google ADK · Vertex AI Agent Engine · MCP Toolbox for Databases · BigQuery ·
 
 Set up your environment (creates venv, installs requirements, sets REGION + PROJECT_ID):
 
-    source ./activate
+    source activate.sh
 
 Verify it worked:
 
-    bash scripts/env_check.shcripts/env_check.sh
-```
+    bash scripts/env_check.sh
 
-Then follow `BUILD.md` (added in Chunk 2) for the step-by-step build sequence.
+Then follow `PROGRESS.md` for the step-by-step build sequence.
 
 ## Race context
 

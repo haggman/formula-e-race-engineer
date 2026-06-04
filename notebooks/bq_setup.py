@@ -30,7 +30,7 @@ PROJECT_ID = (
 REGION = os.environ.get("REGION")
 if not REGION:
     raise RuntimeError(
-        "REGION env var required. Run: source activate/activate.sh"
+        "REGION env var required. Run: source activate.sh"
     )
 DATASET = "fe_race10"
 BUCKET  = "class-demo"
