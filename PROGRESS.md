@@ -42,7 +42,7 @@ Chunks 1–5 complete. The full data plane is live: simulator (frames_v2, 5×) �
 | **Deploy style** | Cloud Run source deploys (`gcloud run deploy --source .`); Artifact Registry mentioned as "production" alternative |
 | **Env target** | Qwiklabs student labs. Cloud Shell with Cloud Shell Editor as dev environment. Per-team GCP projects, ephemeral. |
 | **Python** | 3.12, default in Cloud Shell |
-| **Virtual env** | `.venv/` at repo root, created and activated by `source ./activate` |
+| **Virtual env** | `.venv/` at repo root, created and activated by `source activate.sh` |
 | **Region convention** | All scripts read `REGION` from env (set by `activate` to us-central1 default, override before sourcing). Bucket reference to `gs://class-demo` stays hardcoded — published artifact at known location. |
 
 ---
@@ -117,8 +117,8 @@ All 11 tools validated against deployed URL via `toolbox-core` SDK 1.1.0.
 
 Three concerns addressed before starting chunk 5:
 
-- **Virtual environment** — `.venv/` at repo root, gitignored. Created by `source ./activate`.
-- **Activate script** — `./activate` at repo root sources venv + sets env vars + installs requirements (idempotent via stamp file). One command per Cloud Shell session. Verbose install output (grep-filtered) so students see what's installing.
+- **Virtual environment** — `.venv/` at repo root, gitignored. Created by `source activate.sh`.
+- **Activate script** — `activate.sh` at repo root (`source activate.sh`) sources venv + sets env vars + installs requirements (idempotent via stamp file). One command per Cloud Shell session. Verbose install output (grep-filtered) so students see what's installing.
 - **Region as env var** — all scripts now read `REGION` from env, no hardcoded defaults in application code. `activate` script sets the default (us-central1). Students override with `export REGION=...` before sourcing if their lab assigns a different region.
 
 Files added/changed:
@@ -128,7 +128,7 @@ Files added/changed:
 - `notebooks/bq_setup.py` — reads REGION from env, raises if unset
 - `deploy/deploy_toolbox.sh` — reads REGION from env, fails fast if unset
 - `.gitignore` — added `.venv/`
-- `README.md` — Quick Start updated for `source ./activate` flow
+- `README.md` — Quick Start updated for `source activate.sh` flow
 - `requirements.txt` — expanded to cover chunks 5-11 (BQ, Toolbox, Firestore, Pydantic, ADK, Agent Engine, FastAPI, Pub/Sub, TTS, STT). Strict pins only on `toolbox-core==1.1.0` and `google-adk>=1.0,<2`; everything else uses floors so pip can resolve a coherent matrix.
 
 env_check: 14/14 pass. bq_setup.py re-ran cleanly with env-driven config.
@@ -151,7 +151,7 @@ The architecture pivot to three services (Simulator → **State Writer** → Fir
 **Built in the simulator repo (companion):**
 - `frames_v2.jsonl.gz` (schema 1.1) — notebook Cell 13 post-process: real per-lap top speeds from 20 Hz telemetry (anchor-validated against BQ `top_speed_per_lap`), dropped 532 of 1,248 zero-change overtake events (43% noise). Defaults flipped to v2 in `config.py`/`deploy.sh`; index footer made dynamic.
 
-**Deployed + verified:** `fe-state-writer` and `fe-simulator` on Cloud Run; live 5× replay flowing end-to-end; `test_frame_tools.py --live` green; replay idempotency proven via jump-back (event counts stable).
+**Deployed + verified:** `fe-state-writer` and `fe-simulator` on Cloud Run; live 5× replay flowing end-to-end; `test_frame_tools.py --live` green; replay idempotency proven via jump-back to t=0 (car-13 lap_completed count: 7 before → 7 after re-ingesting the same window).
 
 ---
 
@@ -283,7 +283,7 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 4 — Toolbox to Cloud Run
 - [x] Chunk 4.5 — venv + activate + region-env-var cleanup
 - [x] Chunk 5 — data plane (shared models, State Writer, frame tools, seed + test, frames_v2, idempotent event IDs, reset script)
-- [ ] Cleanup: unify activate references — the file is `activate.sh` at repo root (`source activate.sh`), but `activate.sh`'s own header, `env_check.sh`, `seed_test_state.py`, `state_client.py` error messages, and README variously say `source ./activate` or `source activate/activate.sh`
+- [x] Cleanup: unified activate references — the file is `activate.sh` at repo root (`source activate.sh`); fixed stale refs in 9 files + repaired README quick start (mangled env_check line, stray fence, dead BUILD.md reference)
 - [ ] Chunk 6 — agent definition
 - [ ] Chunk 7 — significance scorer + local harness
 - [ ] Chunk 8 — reasoning iteration on laps 1–10

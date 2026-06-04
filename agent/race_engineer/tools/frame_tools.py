@@ -11,6 +11,12 @@ Tools:
   - get_field_am_status — AM activity across the field
 
 All tools return Pydantic models that the ADK serializes for Gemini.
+
+Time bridging: get_current_state and get_field_am_status include
+race_wall_time_ns — the current moment expressed in the ORIGINAL 2024 race's
+wall clock. Pass that value as `through_time_ns` to the BigQuery Toolbox
+tools to mean "history up to now". (BQ timestamps are from May 2024; the
+replay machine's clock is useless for this.)
 """
 from __future__ import annotations
 
@@ -22,6 +28,7 @@ from agent.race_engineer.config import (
     AM_SCENARIOS,
     AM_TOTAL_BUDGET_S,
     OUR_CAR_NUMBER,
+    race_time_to_wall_ns,
 )
 from agent.race_engineer.tools.state_client import get_state_client
 from shared.models import CarState, Event, EventType, RaceState
@@ -57,6 +64,11 @@ class CurrentStateResponse(BaseModel):
     car_behind: Optional[CarSummary] = None
     race_phase: str
     race_time_s: int
+    race_wall_time_ns: int = Field(
+        description="Current moment in the original 2024 race's wall clock "
+                    "(ns since epoch). Pass as through_time_ns to BigQuery "
+                    "tools to mean 'history up to now'."
+    )
     current_leader_lap: int
     is_retired: bool
 
@@ -87,6 +99,11 @@ class FieldAmStatusResponse(BaseModel):
     scenario_distribution: dict[int, int]      # scenario -> car count
     race_phase: str
     race_time_s: int
+    race_wall_time_ns: int = Field(
+        description="Current moment in the original 2024 race's wall clock "
+                    "(ns since epoch). Pass as through_time_ns to BigQuery "
+                    "tools to mean 'history up to now'."
+    )
 
 
 # ============================================================================
@@ -131,6 +148,7 @@ def get_current_state() -> CurrentStateResponse:
         car_behind=_summarize(car_behind),
         race_phase=state.race_phase.value,
         race_time_s=state.race_time_s,
+        race_wall_time_ns=race_time_to_wall_ns(state.race_time_s),
         current_leader_lap=state.current_leader_lap,
         is_retired=our.is_retired,
     )
@@ -259,6 +277,7 @@ def get_field_am_status() -> FieldAmStatusResponse:
         scenario_distribution=scenario_dist,
         race_phase=state.race_phase.value,
         race_time_s=state.race_time_s,
+        race_wall_time_ns=race_time_to_wall_ns(state.race_time_s),
     )
 
 

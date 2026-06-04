@@ -55,6 +55,16 @@ if [[ -f "$REQ_FILE" ]]; then
     fi
 fi
 
+# --- Vertex AI / ADK ---
+export GOOGLE_GENAI_USE_VERTEXAI=1
+export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
+export GOOGLE_CLOUD_LOCATION=global
+
+# --- Vertex AI / ADK ---
+export GOOGLE_GENAI_USE_VERTEXAI=1
+export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
+export GOOGLE_CLOUD_LOCATION=global
+
 # --- Status ---
 echo ""
 echo "=================================================================="

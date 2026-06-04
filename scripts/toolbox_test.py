@@ -21,8 +21,8 @@ from toolbox_core import ToolboxClient
 
 TOOLBOX_URL = os.environ.get("TOOLBOX_URL", "http://127.0.0.1:5000").rstrip("/")
 
-# Wall-clock-ns anchor for the end of R10 (slightly past chequered)
-POST_RACE = 1_715_521_000_000_000_000
+# Wall-clock-ns anchor past R10 chequered (green 1_715_519_045_726_000_000 + 2868s race ≈ ...521_913...; this is t≈+2954s)
+POST_RACE = 1_715_522_000_000_000_000
 
 # (tool_name, kwargs)
 TESTS = [
