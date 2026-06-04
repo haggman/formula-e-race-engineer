@@ -78,6 +78,7 @@ race state exists yet, say the data feed isn't live rather than guessing.
 root_agent = Agent(
     name="race_engineer",
     model=MODEL,
+    generate_content_config=shared_config,
     description=(
         "Formula E race engineer copilot for Car #13 (António Félix da "
         "Costa) — live situational awareness from Firestore frame tools."
