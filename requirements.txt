@@ -18,7 +18,7 @@ google-cloud-firestore>=2.19
 
 # --- ADK + Agent Engine (chunks 6, 12) ---
 # Strict pin: ADK agent definition API changed in 1.x.
-google-adk>=1.0,<2
+google-adk[toolbox]>=1.0,<2
 google-cloud-aiplatform[adk,agent_engines]>=1.70
 
 # --- Frontend (chunk 9) ---

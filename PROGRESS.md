@@ -2,13 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 5 complete — data plane live end-to-end, frames_v2, idempotent ingestion)
+**Last updated:** 2026-06-04 (chunks 6 + 6.5 complete — agent live with 17 tools; overtake identity bug found and fixed end-to-end)
 
 ---
 
 ## Where we are
 
-Chunks 1–5 complete. The full data plane is live: simulator (frames_v2, 5×) → Pub/Sub → State Writer (idempotent) → Firestore → agent frame tools, all verified against a running replay. Next: chunk 6, the ADK agent definition.
+Chunks 1–6.5 complete. The ADK agent is alive and reasoning against the live replay: 4 frame tools (Firestore "now") + 13 Toolbox tools (BigQuery history + schema discovery), persona prompt in place, terminal chat harness with full tool-call visibility. Along the way, live testing exposed and we fixed a foundational data bug: overtake events' car_number was actually GRID POSITION (frames_v3 + v_overtakes rebuild + tool rewrite). Next: chunk 7, significance scorer + local trigger harness.
 
 ---
 
@@ -20,8 +20,9 @@ Chunks 1–5 complete. The full data plane is live: simulator (frames_v2, 5×) �
 | **Architecture** | Three services + Firestore. **State Writer** (Pub/Sub push → Firestore) handles ingestion; **Agent** (Agent Engine) handles reasoning; **Frontend** (Cloud Run) handles UX, significance scoring, agent invocation. Firestore is the integration point — single source of truth for current race state and events. All three services stateless. |
 | **Service topology** | (1) Simulator on Cloud Run → fe-telemetry Pub/Sub. (2) State Writer on Cloud Run subscribes to topic, writes RaceState + Event docs to Firestore. (3) Agent on Agent Engine reads Firestore via frame tools + BigQuery via MCP Toolbox. (4) Frontend on Cloud Run reads Firestore for live UI, runs significance scorer, invokes Agent. |
 | **Shared models** | `shared/` package at repo root holds canonical Pydantic models for RaceState, CarState, Event. Both State Writer and Agent import from it. Single source of truth for the Firestore contract. ADK deploy bundles `shared/` via `--extra-packages` (or symlink at deploy time — TBD chunk 6). |
-| **Model** | `gemini-3-flash-preview`, global location only |
+| **Model** | `gemini-3.5-flash` (switched from gemini-3-flash-preview in chunk 6), `GOOGLE_CLOUD_LOCATION=global`. Shared `GenerateContentConfig` on the agent adds exponential-backoff retries (10 attempts, 0.5s→4s, jitter) for 408/429/5xx. |
 | **Agent runtime** | Vertex AI Agent Engine, deployed via `adk` CLI |
+| **Frames artifact** | `frames_v3.jsonl.gz` (schema 1.2) — v1: broken top speeds + overtake noise; v2: real top speeds, zero-change overtakes dropped; v3: overtake subjects remapped grid→car. Versions kept side by side, never overwritten. |
 | **BQ tooling** | MCP Toolbox for Databases — curated named queries + one SQL escape hatch. Hybrid documented in lab; we use Toolbox for the build. |
 | **BQ dataset region** | us-central1 (matches bucket) |
 | **State store** | Firestore Native mode, `(default)` database in lab project, free-tier sufficient. Two collections: `race_states/(default)` for current RaceState doc, `race_events/{auto-id}` for individual Event docs indexed by ts_ns, race_time_s, event_type, car_number. |
@@ -153,11 +154,29 @@ The architecture pivot to three services (Simulator → **State Writer** → Fir
 
 **Deployed + verified:** `fe-state-writer` and `fe-simulator` on Cloud Run; live 5× replay flowing end-to-end; `test_frame_tools.py --live` green; replay idempotency proven via jump-back to t=0 (car-13 lap_completed count: 7 before → 7 after re-ingesting the same window).
 
+### Chunk 6 — Agent definition (4 passes) ✅
+
+- **Pass 1 — skeleton + frame tools.** `agent/race_engineer/agent.py` (pure wiring) + `prompts.py` (all NL text). Model `gemini-3.5-flash`, shared `GenerateContentConfig` with exponential-backoff retries. Four frame tools registered. Time bridge: `RACE_START_EPOCH_NS = 1_715_519_045_726_000_000` (exact int) in config; `race_wall_time_ns` field on state/AM responses for BQ `through_time_ns`. Smoke-tested in `adk web` (requires `--allow_origins "*"` behind Cloud Shell Web Preview).
+- **Pass 2 — MCP Toolbox wired.** `ToolboxToolset` from `google-adk[toolbox]` (delegates to `toolbox-adk`, coexists with `toolbox-core==1.1.0` pin), `TOOLBOX_URL` auto-discovered by `activate.sh`. Adversarial mid-race test PROVED the time bridge (race control at t=655 returned only the past). Live testing found+fixed: ADK passes enum args as strings (frame tools now take `list[str]`, coerce internally); sync `runner.run()` spins a loop per question and kills the toolset (chat harness rewritten fully async).
+- **Pass 2.5 — Toolbox refinement.** New `get_lap_time_windows` (lap↔ns mapping); BQ metadata discovery tools `bigquery_list_table_ids` + `bigquery_get_table_info` (structure from metadata, semantics in descriptions); `execute_sql_bq` docs rewritten semantic-only. Result: discovery-first SQL with zero guessed-column errors. Fixed latent `SERVICE_NAME` unbound var in `deploy_toolbox.sh`.
+- **Pass 3 — persona.** Radio voice (second person, 6-8s proactive calls, no editorializing, no markdown), TTS normalization, three call templates (event reaction / lap summary / Q&A), racing doctrine (AM scenarios, arming vs activation, energy normalization, no invented time-gaps), honesty rules, debug carve-out. Live grading found+fixed: replay-clock leak (model used events' `ts_ns_wall` as `through_time_ns` → `AgentEvent` slim view hides it) and hallucinated driver names for unknown car numbers (names-from-tools-only rule).
+- **Dev harness:** `scripts/agent_chat.py` — async terminal REPL printing every tool call + args + truncated response. The chunks 7-8 iteration surface.
+
+### Chunk 6.5 — Overtake identity remediation ✅
+
+Live agent testing surfaced phantom car numbers (6, 10, 12, 14, 15, 19, 20) in overtake events. Investigation via position-adjacency scoring across all 728 overtake records proved: **in the source overtake stream, `car_number` is the subject's GRID POSITION (domain 1-22); `attrs_json.other_car` is a real car number** — two ID domains in one record. Gap-distribution histogram confirmed (grid_car: monotonic decay from gap≤1 mode, 679/728 scored; car_car control: 40% mass at gap>8). Every prior overtake attribution was wrong except by grid coincidence.
+
+Fixed end-to-end:
+- `bq_setup.py` — `v_overtakes` rebuilt: grid join resolves subject, both participants as real cars + driver codes, `human_summary` REGENERATED (source strings embed grid IDs — poisoned)
+- `tools.yaml` — `get_overtakes_involving` rewritten against the fixed view; `car_pattern` LIKE hack eliminated
+- `frames_v3.jsonl.gz` (schema 1.2) — standalone notebook Cell 14 remaps overtake subjects through the grid map; validated (716 remapped, 0 unmappable, all 7 cars >22 now appear as subjects, DAC tops involvement at 51)
+- Firestore reset + clean v3 replay; `test_frame_tools.py --live` green
+
 ---
 
 ## In progress
 
-**Chunk 6 — agent definition.** `agent/race_engineer/agent.py` + `prompts.py`: ADK agent on `gemini-3-flash-preview`, wired to the four frame tools and the deployed MCP Toolbox (11 BQ tools). Validated locally via `adk web` against the live Firestore replay.
+**Chunk 7 — significance scorer + local harness.** `scripts/local_test.py`: deterministic scorer reads Firestore state + events, fires agent on triggers (significant event / end-of-lap / debounced 15s), prints transcripts. Builds on `agent_chat.py`'s async Runner pattern. Validate against laps 1-10.
 
 ---
 
@@ -165,7 +184,6 @@ The architecture pivot to three services (Simulator → **State Writer** → Fir
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 6 | Agent definition | `agent/race_engineer/agent.py` + `prompts.py` — ADK agent wired to model, Toolbox MCP, and frame tools. `adk web` runs locally against live Firestore data for text chat. |
 | 7 | Significance scorer + local harness | `scripts/local_test.py` — reads Firestore state, scores frames, calls agent on triggers, prints + plays TTS. Validate against laps 1–10. |
 | 8 | **Reasoning iteration** | Prompt and tool refinements until laps 1–10 reasoning is good. *Where most of the value lands.* |
 | 9 | Frontend (text-only) | `frontend/` — FastAPI + websocket + Firestore reader + browser UI. No Pub/Sub here; State Writer owns ingestion. |
@@ -198,7 +216,7 @@ These didn't make the build doc but matter for downstream work:
 - **Did NOT activate in the lap-3 AM cluster** (contrary to ~13 of 22 cars) — held back
 - Armed 9 times across the race (most in the field) — scenario changes 2→3→1→2→3→...
 - Top speed climbed smoothly 215.4 → 222.6 → 224.8 → 228.4 → 236.3 km/h over laps 1–5
-- Got passed multiple times by car #1 (DEN) but recovered
+- Battle profile (RE-VERIFIED post-identity-fix, both directions): top rivals CAS 11 exchanges (DAC gained 7 / lost 4 — the real fight for the win) and JEV 11 (grid neighbors P9/P10, 5/6 split); DEN passed DAC 6 times with no direct repass — the original "passed repeatedly by Dennis but recovered" finding was correct by grid coincidence (Dennis: P1 in car #1). FEN 7, GUE/DIG/NAT 4 each (against). One source glitch: a single DAC-overtakes-DAC record (subject and other both resolve to 13) — excluded from analysis.
 - Won the race
 
 **Data quirks (Fork 4 candidate gotchas):**
@@ -263,6 +281,30 @@ These didn't make the build doc but matter for downstream work:
 - v2 written alongside v1 (never overwrite published artifacts); `schema_version` 1.1; `top_speed_kmh` now float.
 - Simulator `/schema` endpoint returns the file's *midpoint* frame — t=1449, a quiet safety-car tick with empty `events[]`. Not a bug. (Same moment as our canonical seed frame, for the same reason.)
 
+**OVERTAKE IDENTITY (the marquee Fork 4 gotcha): `car_number` in overtake records is a GRID POSITION.**
+- Source overtake stream (timing.parquet → event_stream → frames): subject field named `car_number` holds the car's STARTING GRID POSITION (1-22); `other_car`/`participant` holds a real car number. Two ID domains in one record.
+- Detection path worth teaching: phantom car numbers in agent answers → entry-list join showed exactly {1..22} present and ALL seven cars >22 absent → hypothesis scoring by position adjacency at event time → gap-distribution histogram as the clincher.
+- Consequence pre-fix: every overtake attribution wrong except by coincidence (e.g. "Rowland: 5 overtakes" on a 13-place charge; frame events tagged car 13 were actually grid-P13 = Daruvala). Original chunk-2 finding "DAC got passed multiple times by #1 (DEN)" is SUPERSEDED — re-verify against rebuilt v_overtakes.
+- Source `human_summary` strings embed the grid IDs — poisoned; regenerate, never pass through.
+- Methodology note: an aggregate adjacency score of ~50% was enough to win decisively (control: 17%), but below the naive 80-90% expectation — end-of-lap position snapshots smear mid-lap AM-driven swings. Score shape (decay vs flat) was the reliable signal.
+
+**ADK function-calling gotchas (google-adk 1.x):**
+- ADK does NOT coerce JSON args into Python enums: `Optional[list[EventType]]` arrives as `list[str]` and crashes. Tool signatures should take `list[str]` and coerce internally with a clear error.
+- Sync `runner.run()` spins a fresh thread+event loop PER CALL; `ToolboxToolset`'s HTTP client binds to the first loop and dies on the second ("Event loop is closed"). Any multi-turn harness must be fully async on one loop (`run_async`). `adk web` is immune (single uvicorn loop).
+- Gemini function args travel as JSON numbers (float64): nanosecond timestamps lose precision (~256ns ulp at 1.7e18). Harmless at race timescales; do not rely on ns-exactness through the LLM.
+- `adk run` prints ONLY text parts — tool calls and args are silently swallowed. For arg-level debugging use `adk web`'s Events tab or `scripts/agent_chat.py`.
+- `adk web` behind Cloud Shell Web Preview: session creation fails (proxy rewrites origin) without `--allow_origins "*"`.
+- `ToolboxToolset` comes from `google-adk[toolbox]` (the `toolbox-adk` package, which depends on toolbox-core — coexists with our `==1.1.0` pin). Construction is lazy; no network at import.
+
+**Agent data-hygiene patterns (found via live grading):**
+- Replay-clock leak: events carried `ts_ns_wall` (2026 replay clock); model grabbed it as `through_time_ns` for 2024-clocked BQ tools → whole-race future leak. Fix at the DATA level: `AgentEvent` slim view (event_type, race_time_s, car_number, data) — never show the model plumbing fields it can misuse. Prompt rules alone were insufficient.
+- Hallucinated identities: model invented a driver name ("Frijns") for an unmapped car number. Fix: hard prompt rule — names ONLY from tool responses; unknown numbers stay numbers. Verified live: model hit car 10, got 0 rows from get_driver_info, correctly declined to name it.
+- Structure vs semantics division for SQL escape hatches: schema discovery via `bigquery_list_table_ids`/`bigquery_get_table_info` (machine truth, never rots); tool descriptions carry ONLY semantics metadata can't express (broken columns, ns conventions, normalization caveats). Result: discovery-first behavior, zero guessed-column 400s.
+- Intra-turn state drift: at 5× replay, the 1s RaceState TTL = 5 race-seconds; a 16-tool-call turn spanned ~200 race-seconds. Acceptable for Q&A; chunk 7+ triggers should pass a state snapshot. Also a latency flag for chunk 8: cap tool-call budget per radio call.
+- `toolbox_test.py` POST_RACE anchor was mid-race (t≈1954s), not past chequered — tests verified mechanics, not completeness. Fixed to past-chequered value.
+
+**Retirements in R10:** car 7 (GUE) lap 10, car 23 (FEN) lap 24. Both matter for field-size assertions and per-lap joins.
+
 **Three-service architecture rationale:**
 - Two services (frontend owns ingestion + UX) would have collapsed concerns and made the lab harder to teach
 - Three services (Writer / Agent / Frontend) gives the hackathon three clean team handoff points: ingestion patterns, agent reasoning, UX orchestration
@@ -284,7 +326,9 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 4.5 — venv + activate + region-env-var cleanup
 - [x] Chunk 5 — data plane (shared models, State Writer, frame tools, seed + test, frames_v2, idempotent event IDs, reset script)
 - [x] Cleanup: unified activate references — the file is `activate.sh` at repo root (`source activate.sh`); fixed stale refs in 9 files + repaired README quick start (mangled env_check line, stray fence, dead BUILD.md reference)
-- [ ] Chunk 6 — agent definition
+- [x] Chunk 6 — agent definition (4 passes: skeleton, Toolbox, discovery tools, persona; async chat harness)
+- [x] Chunk 6.5 — overtake identity remediation (v_overtakes rebuild, tool rewrite, frames_v3)
+- [x] Re-verified DAC battle list against rebuilt v_overtakes — CAS and JEV top rivals (11 each); original DEN finding confirmed by grid coincidence
 - [ ] Chunk 7 — significance scorer + local harness
 - [ ] Chunk 8 — reasoning iteration on laps 1–10
 - [ ] Chunk 9 — frontend (text-only)

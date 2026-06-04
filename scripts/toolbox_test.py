@@ -48,7 +48,7 @@ TESTS = [
      {"car_number": 13, "through_time_ns": POST_RACE}),
 
     ("get_overtakes_involving",
-     {"car_number": 13, "car_pattern": "%#13%", "through_time_ns": POST_RACE}),
+     {"car_number": 13, "through_time_ns": POST_RACE}),
 
     ("get_driver_career_stats",
      {"driver_code": "DAC"}),

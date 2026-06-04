@@ -8,6 +8,7 @@ if [[ -z "${REGION:-}" ]]; then
     echo "ERROR: REGION env var required. Run: source activate.sh" >&2
     exit 1
 fi
+SERVICE_NAME="${SERVICE_NAME:-fe-toolbox}"
 SA_NAME="${SA_NAME:-fe-toolbox-sa}"
 TOOLBOX_IMAGE="${TOOLBOX_IMAGE:-us-central1-docker.pkg.dev/database-toolbox/toolbox/toolbox:1.3.0}"
 

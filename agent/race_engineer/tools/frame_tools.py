@@ -12,6 +12,11 @@ Tools:
 
 All tools return Pydantic models that the ADK serializes for Gemini.
 
+Design note on event_types parameters: Gemini passes function arguments as
+JSON, so enum-typed parameters arrive as plain strings and ADK does NOT
+coerce them. The tool signatures therefore take list[str] and coerce to
+EventType internally (with a clear error listing valid values).
+
 Time bridging: get_current_state and get_field_am_status include
 race_wall_time_ns — the current moment expressed in the ORIGINAL 2024 race's
 wall clock. Pass that value as `through_time_ns` to the BigQuery Toolbox
@@ -73,9 +78,34 @@ class CurrentStateResponse(BaseModel):
     is_retired: bool
 
 
+class AgentEvent(BaseModel):
+    """Agent-facing view of an Event — reasoning-relevant fields only.
+
+    Deliberately excludes ts_ns_wall (the REPLAY machine's wall clock) and
+    race_id. ts_ns_wall was observed luring the model into passing a 2026
+    timestamp as through_time_ns to the 2024-clocked BigQuery tools, which
+    silently returns the whole race (a future leak). Events expose
+    race_time_s only; the sole valid through_time_ns source remains
+    race_wall_time_ns from get_current_state / get_field_am_status.
+    """
+    event_type: EventType
+    race_time_s: int
+    car_number: Optional[int] = None
+    data: dict = Field(default_factory=dict)
+
+    @classmethod
+    def from_event(cls, e: Event) -> "AgentEvent":
+        return cls(
+            event_type=e.event_type,
+            race_time_s=e.race_time_s,
+            car_number=e.car_number,
+            data=e.data,
+        )
+
+
 class RecentEventsResponse(BaseModel):
     """List of events matching a query, newest first."""
-    events: list[Event]
+    events: list[AgentEvent]
     count: int
     filters_applied: dict = Field(default_factory=dict)
 
@@ -156,7 +186,7 @@ def get_current_state() -> CurrentStateResponse:
 
 def get_recent_events(
     seconds_back: int = 30,
-    event_types: Optional[list[EventType]] = None,
+    event_types: Optional[list[str]] = None,
     car_involved: Optional[int] = None,
     limit: int = 50,
 ) -> RecentEventsResponse:
@@ -167,10 +197,13 @@ def get_recent_events(
 
     Args:
       seconds_back: Look back this many seconds from the current race_time_s.
-      event_types: Only events of these types (e.g. [OVERTAKE, RACE_CONTROL]).
+      event_types: Only events of these types. Valid values: "race_control",
+        "overtake", "attack_mode_activated", "attack_mode_deactivated",
+        "lap_completed".
       car_involved: Only events with car_number = this value.
       limit: Cap on number of events returned (default 50).
     """
+    types = _coerce_event_types(event_types)
     state = _require_state()
     to_race_time = state.race_time_s
     from_race_time = max(0, to_race_time - seconds_back)
@@ -179,18 +212,19 @@ def get_recent_events(
     events = client.query_events(
         from_race_time_s=from_race_time,
         to_race_time_s=to_race_time,
-        event_types=event_types,
+        event_types=types,
         car_involved=car_involved,
         limit=limit,
     )
 
+    agent_events = [AgentEvent.from_event(e) for e in events]
     return RecentEventsResponse(
-        events=events,
-        count=len(events),
+        events=agent_events,
+        count=len(agent_events),
         filters_applied={
             "from_race_time_s": from_race_time,
             "to_race_time_s": to_race_time,
-            "event_types": [t.value for t in event_types] if event_types else None,
+            "event_types": [t.value for t in types] if types else None,
             "car_involved": car_involved,
             "limit": limit,
         },
@@ -200,7 +234,7 @@ def get_recent_events(
 def get_events_in_range(
     from_race_time_s: int,
     to_race_time_s: int,
-    event_types: Optional[list[EventType]] = None,
+    event_types: Optional[list[str]] = None,
     car_involved: Optional[int] = None,
     limit: int = 100,
 ) -> RecentEventsResponse:
@@ -208,22 +242,33 @@ def get_events_in_range(
 
     Use for "what happened on lap N" or "everything since safety car."
     Same shape as get_recent_events but absolute window.
+
+    Args:
+      from_race_time_s: Window start (race-relative seconds, inclusive).
+      to_race_time_s: Window end (race-relative seconds, inclusive).
+      event_types: Only events of these types. Valid values: "race_control",
+        "overtake", "attack_mode_activated", "attack_mode_deactivated",
+        "lap_completed".
+      car_involved: Only events with car_number = this value.
+      limit: Cap on number of events returned (default 100).
     """
+    types = _coerce_event_types(event_types)
     client = get_state_client()
     events = client.query_events(
         from_race_time_s=from_race_time_s,
         to_race_time_s=to_race_time_s,
-        event_types=event_types,
+        event_types=types,
         car_involved=car_involved,
         limit=limit,
     )
+    agent_events = [AgentEvent.from_event(e) for e in events]
     return RecentEventsResponse(
-        events=events,
-        count=len(events),
+        events=agent_events,
+        count=len(agent_events),
         filters_applied={
             "from_race_time_s": from_race_time_s,
             "to_race_time_s": to_race_time_s,
-            "event_types": [t.value for t in event_types] if event_types else None,
+            "event_types": [t.value for t in types] if types else None,
             "car_involved": car_involved,
             "limit": limit,
         },
@@ -284,6 +329,31 @@ def get_field_am_status() -> FieldAmStatusResponse:
 # ============================================================================
 # Helpers
 # ============================================================================
+
+
+def _coerce_event_types(
+    event_types: Optional[list[str]],
+) -> Optional[list[EventType]]:
+    """Coerce string event types (as Gemini sends them) to EventType enums.
+
+    ADK passes function args straight from JSON — enum coercion is on us.
+    Accepts EventType instances too (our own tests pass them directly).
+    """
+    if not event_types:
+        return None
+    coerced: list[EventType] = []
+    for t in event_types:
+        if isinstance(t, EventType):
+            coerced.append(t)
+            continue
+        try:
+            coerced.append(EventType(t))
+        except ValueError:
+            valid = ", ".join(e.value for e in EventType)
+            raise ValueError(
+                f"Unknown event type {t!r}. Valid values: {valid}"
+            )
+    return coerced
 
 
 def _require_state() -> RaceState:

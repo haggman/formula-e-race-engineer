@@ -96,6 +96,9 @@ class StateClient:
         """Query events with optional filters.
 
         Filters compose with AND. Results ordered newest-first.
+
+        event_types is normalized defensively: EventType members or plain
+        strings both work (Gemini-originated calls arrive as strings).
         """
         q = self._db.collection("race_events").where(
             filter=firestore.FieldFilter("race_id", "==", self.race_id)
@@ -110,10 +113,12 @@ class StateClient:
                 filter=firestore.FieldFilter("race_time_s", "<=", to_race_time_s)
             )
         if event_types:
+            type_values = [
+                t.value if isinstance(t, EventType) else str(t)
+                for t in event_types
+            ]
             q = q.where(
-                filter=firestore.FieldFilter(
-                    "event_type", "in", [t.value for t in event_types]
-                )
+                filter=firestore.FieldFilter("event_type", "in", type_values)
             )
         if car_involved is not None:
             q = q.where(
