@@ -1,9 +1,11 @@
-"""Race Engineer agent definition (ADK).
+"""Race Engineer agent definition (ADK) — pure wiring.
 
-Pass 1 (chunk 6): agent skeleton — Gemini model + the four Firestore frame
-tools, with a minimal working instruction. The full persona / radio-call
-prompt moves to prompts.py in Pass 3. MCP Toolbox (BigQuery history) is
-wired in Pass 2.
+Model, retry config, and tool registration only. All natural-language text
+(description, instruction) lives in prompts.py.
+
+Chunk 6 status: Pass 1 complete (frame tools). MCP Toolbox (BigQuery
+history) is wired in Pass 2; the full persona prompt lands in prompts.py
+during Pass 3.
 
 `adk web` discovers this module via agent/race_engineer/__init__.py, which
 imports it and exposes `root_agent`.
@@ -11,16 +13,16 @@ imports it and exposes `root_agent`.
 Required env (exported by `source activate.sh`):
   GOOGLE_GENAI_USE_VERTEXAI=1
   GOOGLE_CLOUD_PROJECT=<lab project>
-  GOOGLE_CLOUD_LOCATION=global       # gemini-3-flash-preview is global-only
+  GOOGLE_CLOUD_LOCATION=global
 """
 from __future__ import annotations
 
 from google.adk.agents import Agent
+from google.genai import types
 
-from agent.race_engineer.config import (
-    OUR_CAR_NUMBER,
-    OUR_DRIVER_FIRST_NAME,
-    OUR_DRIVER_SHORT_NAME,
+from agent.race_engineer.prompts import (
+    ROOT_AGENT_DESCRIPTION,
+    ROOT_AGENT_INSTRUCTION,
 )
 from agent.race_engineer.tools.frame_tools import (
     get_current_state,
@@ -29,7 +31,8 @@ from agent.race_engineer.tools.frame_tools import (
     get_recent_events,
 )
 
-from google.genai import types
+MODEL = "gemini-3.5-flash"
+
 # ============================================================================
 # Enable Provisioned Throughput (where applicable) and Exponential Backoff
 # ============================================================================
@@ -48,42 +51,12 @@ shared_config = types.GenerateContentConfig(
     ),
 )
 
-MODEL = "gemini-3.5-flash"
-
-# Pass 1 placeholder — enough to exercise the tools sensibly in adk web.
-# The real persona prompt (radio style, 6-8s calls, TTS normalization,
-# AM scenario doctrine) lands in prompts.py during Pass 3.
-PASS1_INSTRUCTION = f"""
-You are the race engineer for Car #{OUR_CAR_NUMBER}, driven by
-{OUR_DRIVER_FIRST_NAME} Félix da Costa ({OUR_DRIVER_SHORT_NAME}), during a
-Formula E race (Berlin 2024, Round 10).
-
-You observe a LIVE race via tools. Never answer race-state questions from
-memory — always check the tools first:
-
-- get_current_state: position, lap, energy, Attack Mode, cars ahead/behind.
-  Call this first for any "what's happening now" question.
-- get_recent_events: what just happened (overtakes, AM activations,
-  race control, lap completions) in the last N seconds.
-- get_events_in_range: events in a specific race-time window. One lap is
-  roughly 66-68 seconds; lap N spans approximately
-  [(N-1) * 67, N * 67] seconds of race time.
-- get_field_am_status: Attack Mode picture across the whole field.
-
-Speak to the driver in second person ("Antonio, ..."). Be concise and
-factual, like a real race engineer on the radio. If a tool fails because no
-race state exists yet, say the data feed isn't live rather than guessing.
-""".strip()
-
 root_agent = Agent(
     name="race_engineer",
     model=MODEL,
     generate_content_config=shared_config,
-    description=(
-        "Formula E race engineer copilot for Car #13 (António Félix da "
-        "Costa) — live situational awareness from Firestore frame tools."
-    ),
-    instruction=PASS1_INSTRUCTION,
+    description=ROOT_AGENT_DESCRIPTION,
+    instruction=ROOT_AGENT_INSTRUCTION,
     tools=[
         get_current_state,
         get_recent_events,
