@@ -382,6 +382,9 @@ These didn't make the build doc but matter for downstream work:
 - [x] Lap-1 ring calibration — root fixed in chunk 11 (tracking starts at the green flag)
 - [x] Chunk 10 — TTS (Chirp 3 HD via radio_broadcast wrapper; digits normalization; DEMO.md)
 - [x] Chunk 11 — STT push-to-talk (Chirp 2, spacebar PTT, visible transcript; enable_apis.sh)
+- [ ] README final pass — discuss structure before writing (quick start, architecture map, pointer to DEMO.md/PROGRESS.md, lab setup order incl. enable_apis.sh as step zero); do this when the architecture stops moving (post-chunk-13)
+- [ ] README rewrite — deliberate end-of-project pass; discuss structure and audience first (quick start vs pointers to DEMO.md / PROGRESS; student vs instructor reader)
+- [ ] README rewrite at the end (chunk 14 era): discuss structure first — setup path (enable_apis.sh as step zero), architecture overview, run instructions, pointers to DEMO.md and PROGRESS.md; write once the deploy story (chunks 12-13) is settled
 - [ ] Chunk 12 — agent to Agent Engine
 - [ ] Chunk 13 — frontend to Cloud Run, auth flip
 - [ ] Chunk 14 — demo dry run
