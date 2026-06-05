@@ -4,6 +4,33 @@
 # Time format note: most BQ timestamps are INT64 nanoseconds since epoch.
 # The agent passes wall-clock-time-ns as a parameter; the simulator's
 # frontend computes that from race_time_s + race_start_epoch_ns.
+#
+# ----------------------------------------------------------------------------
+# PRODUCTION NOTE — this Toolbox deploys with OPEN auth, on purpose.
+#
+# The lab leaves fe-toolbox at --allow-unauthenticated because the threat
+# model doesn't justify the lockdown: every tool here is a read-only SELECT
+# over public 2024 sports data, in an ephemeral lab project, behind an
+# unguessable Cloud Run URL. Worst case is a stranger spending pennies of
+# BigQuery scan. The auth effort in this stack went where unauthenticated
+# access could corrupt state: the State Writer's OIDC-authenticated
+# Pub/Sub push.
+#
+# To lock it down for production:
+#   1. Grant the caller invoker rights. The agent calls Toolbox FROM Agent
+#      Engine, so the caller is the engine's service agent:
+#        gcloud run services add-iam-policy-binding fe-toolbox \
+#          --member="serviceAccount:service-PROJECT_NUMBER@gcp-sa-aiplatform-re.iam.gserviceaccount.com" \
+#          --role="roles/run.invoker" --region=us-central1
+#   2. Redeploy fe-toolbox with --no-allow-unauthenticated
+#      (flip the flag in deploy/deploy_toolbox.sh).
+#   3. VERIFY the agent's ToolboxToolset attaches an identity token to its
+#      requests — this is the step with real uncertainty. Run
+#      scripts/engine_smoke.py: if the BigQuery question fails after the
+#      flip, the toolset is calling anonymously and needs its auth hook
+#      configured (see toolbox-core docs on Cloud Run authentication).
+#   Rollback is one command: redeploy with --allow-unauthenticated.
+# ----------------------------------------------------------------------------
 
 sources:
   bq-fe-race10:

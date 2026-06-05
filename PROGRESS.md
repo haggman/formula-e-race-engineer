@@ -2,18 +2,19 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 12 complete — agent live on Agent Engine; project-number Firestore gotcha found and fixed; remote smoke test green on both data worlds)
+**Last updated:** 2026-06-05 (chunk 13 complete — frontend live on Cloud Run in engine mode; Toolbox auth flip deliberately descoped; full demo URL exists)
 
 ---
 
 ## Where we are
 
-Chunks 1–12 complete. The agent has left the laptop: it runs on Vertex AI
-Agent Engine, reaching BigQuery through the deployed Toolbox and Firestore
-through its service agent. `scripts/engine_smoke.py` exercises both paths
-remotely and both answer in character. Next: chunk 13 — frontend to Cloud
-Run with the auth flip (Toolbox locked down, frontend pointed at the
-deployed engine via env switch).
+Chunks 1–13 complete. The whole stack is deployed: simulator → State Writer
+→ Firestore, agent on Agent Engine, and now the pit-wall frontend on Cloud
+Run (public demo URL), talking to the engine via the AGENT_MODE seam.
+Triggers, Q&A, TTS, and push-to-talk all verified against the deployed
+stack at 2× and 5×. Toolbox lockdown was descoped on purpose (read-only
+public data, ephemeral lab project) and documented as a production note.
+Next: chunk 14 — the demo dry run at 1×, which doubles as the soak test.
 
 ---
 
@@ -27,6 +28,7 @@ deployed engine via env switch).
 | **Shared models** | `shared/` package at repo root holds canonical Pydantic models for RaceState, CarState, Event. Both State Writer and Agent import from it. Single source of truth for the Firestore contract. Engine deploy vendors `shared/` into the staged app (see Engine deploy row). |
 | **Model** | `gemini-3.5-flash` (switched from gemini-3-flash-preview in chunk 6), `GOOGLE_CLOUD_LOCATION=global`. Shared `GenerateContentConfig` on the agent adds exponential-backoff retries (10 attempts, 0.5s→4s, jitter) for 408/429/5xx. |
 | **Agent runtime** | Vertex AI Agent Engine, deployed via `adk` CLI |
+| **Agent invocation (frontend)** | `frontend/agent_client.py` seam: `AGENT_MODE=local` (InMemoryRunner in-process — the permanent dev path) vs `AGENT_MODE=engine` (deployed engine via agent_engines SDK). Engine calls run as SYNC SDK methods inside `asyncio.to_thread` (the SDK blocks the event loop, async_* variants included). Triggers AND Q&A both go remote in engine mode — settled by live stint comparison vs the chunk 8 baseline. Hard RunConfig tool ceiling is local-only; engine mode substitutes wall-clock timeouts (FIRE_TIMEOUT_S=30 / ASK_TIMEOUT_S=75) + drop-on-empty. |
 | **Engine deploy** | Self-contained `build/engine_app/` staged by `deploy/build_engine_app.py` (vendors `race_engineer` + `shared`, rewrites imports, bakes `.env` with TOOLBOX_URL + PROJECT_ID); `adk deploy agent_engine` via `deploy/deploy_agent_engine.sh`; resource name persisted in `deploy/.engine_resource` so re-runs UPDATE the same engine. |
 | **Frames artifact** | `frames_v3.jsonl.gz` (schema 1.2) — v1: broken top speeds + overtake noise; v2: real top speeds, zero-change overtakes dropped; v3: overtake subjects remapped grid→car. Versions kept side by side, never overwritten. |
 | **BQ tooling** | MCP Toolbox for Databases — curated named queries + one SQL escape hatch. Hybrid documented in lab; we use Toolbox for the build. |
@@ -39,14 +41,14 @@ deployed engine via env switch).
 | **Per-lap summary template** | Position, gaps, energy state, AM state, optional one-line strategic note |
 | **Significance scorer** | Deterministic, lives in frontend, debounced (no trigger within 15s of last) |
 | **Agent sessions** | Fresh per trigger for proactive announcements; persistent session for Q&A follow-ups |
-| **Toolbox auth** | Open during dev (now), authenticated via service-account invoker when frontend deploys (chunk 13) |
+| **Toolbox auth** | DESCOPED (decided end of chunk 13): stays `--allow-unauthenticated` for the lab. Threat model: read-only queries over public 2024 sports data, ephemeral Qwiklabs project, unguessable URL — worst case is pennies of BQ scan. Auth effort went where it protects state (State Writer OIDC push). Production note documented in tools.yaml/DEMO: grant the Agent Engine service agent `run.invoker` on fe-toolbox, drop `--allow-unauthenticated`, verify the toolset sends identity tokens. |
 | **Pub/Sub flow** | Single subscriber: State Writer service via push subscription. Pub/Sub never reaches frontend or agent directly. |
 | **R09 inclusion** | Not loaded — R10 only for Fork 2. R09 deferred. |
 | **Demo stint** | Laps 1–10, anchored by lap-3 AM cluster (DAC was *not* in the cluster — strategic hold-back, contrary to ~13 cars who activated). |
 | **BQML** | Stretch / Task 7 only. Not in core reference. Pattern stub may appear later for extraction into Fork 5 starter. |
 | **Event-stream tool** | Built here in Fork 2; Fork 5 extracts starter version |
 | **Gemini Live** | Stretch demo addition after core works. Push-to-talk + STT/TTS is the canonical path. |
-| **Deploy style** | Cloud Run source deploys (`gcloud run deploy --source .`); Artifact Registry mentioned as "production" alternative |
+| **Deploy style** | Source deploys (`gcloud run deploy --source .`) when the repo IS the app (simulator). Explicit Dockerfile + `gcloud builds submit --config` for services carved from this monorepo (state_writer, frontend): the build context must be the repo root to COPY `shared/`/`agent/`, two services can't share one root Dockerfile, and Buildpacks would install the dev requirements.txt (ADK, Toolbox — bloat plus the import trap). Teaching line: same container either way; the only difference is who writes the build recipe. |
 | **Env target** | Qwiklabs student labs. Cloud Shell with Cloud Shell Editor as dev environment. Per-team GCP projects, ephemeral. |
 | **Python** | 3.12, default in Cloud Shell |
 | **Virtual env** | `.venv/` at repo root, created and activated by `source activate.sh` |
@@ -236,11 +238,23 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 - **Found + fixed — the project-number Firestore 404:** first smoke run answered the BigQuery question but returned EMPTY on the Firestore question; Logs Explorer showed `404 The database (default) does not exist for project 83898679865`. The database existed, APIs on, IAM correct (a permissions problem would have been 403). Root cause: Agent Engine supplies `GOOGLE_CLOUD_PROJECT` as the project **NUMBER**, and Firestore rejects number-addressed database paths with that misleading "does not exist" error. `state_client.py` preferred `GOOGLE_CLOUD_PROJECT`, which is the ID locally (activate.sh) but the number on the engine. Fix: `build_engine_app.py` bakes `PROJECT_ID` (the real ID) into the engine `.env`; `state_client.get_state_client()` now prefers `PROJECT_ID` over `GOOGLE_CLOUD_PROJECT` and warns if the resolved value is all digits.
 - **Verified:** redeploy + `engine_smoke.py` green on both worlds — BigQuery via Toolbox ("Antonio, you are driving car 13 for TAG Heuer Porsche", 7.8s) and Firestore live state against a running replay ("P6. Energy is 94.1 percent remaining", 4.8s). The deploy's IAM grant ran clean in the post-deploy position.
 
+### Chunk 13 — Frontend to Cloud Run (3 passes; auth flip descoped) ✅
+
+- **Pass 1 — the seam.** `frontend/agent_client.py`: `LocalAgentClient` (the chunk 9-11 runner code verbatim — fresh session + RunConfig ceiling per trigger, persistent Q&A session) and `EngineAgentClient` (the deployed engine). `engineer_loop.py` rewired through `fire()`/`ask()`; every line of trigger policy untouched. `activate.sh` exports `AGENT_MODE` + auto-loads `AGENT_ENGINE_RESOURCE` from `deploy/.engine_resource` (and lost its duplicated Vertex env block).
+  - **Found live + fixed: the agent_engines SDK BLOCKS the event loop — async_* variants included.** First engine-mode run: jerky lap ring, bursty state broadcasts, /api/stt unserved 20-30s — everything sharing the loop starved while engine calls were in flight. Fix: call the SYNC SDK methods (the exact ones engine_smoke validated) inside `asyncio.to_thread`; wall-clock timeouts (abandon-on-timeout = drop-a-stale-call policy). UI back to 1 Hz under load.
+  - Stint validation settled the sub-fork: triggers AND Q&A both remote, latency comparable to the local band; remote persistent Q&A session survives frontend restarts (it lives on the engine).
+- **Pass 2 — containerize + deploy.** `frontend/Dockerfile` + `frontend/requirements.txt` (slim: no ADK/Toolbox — the agent runtime lives on the engine; AGENT_MODE=local unsupported in-container by design). `deploy/deploy_frontend.sh`: Cloud Build from repo root with `-f frontend/Dockerfile`, SA `fe-frontend-sa` (datastore.user + aiplatform.user + speech.client), engine resource + SIM_URL baked into env, public URL. **Load-bearing Cloud Run flags, not tuning:** `--min-instances=1 --max-instances=1` (the engineer loop is a background task — scale-to-zero kills it; a second instance is a second engineer talking over the first) and `--no-cpu-throttling` (background tasks need CPU between requests; instance-based billing).
+  - `agent/race_engineer/__init__.py` guarded: its eager `adk web` discovery import (needs google-adk + TOOLBOX_URL) would crash the slim container on package import. Now imports only when both are present; adk web unaffected.
+  - **Found + fixed: STT dead on Cloud Run, fine in Cloud Shell** — Speech-to-Text V2 recognizers are IAM resources; the `_` recognizer needs `roles/speech.client` on the service SA. Worked in dev only via the student account's broad roles. Classic dev-vs-deployed IAM gap. (TTS has no equivalent resource-level IAM — voice out never broke.)
+  - **Found + fixed: empty radio boxes** — an engine run that dies mid-flight (quota exhaustion, tool failure) can end its event stream with NO error event and NO text; locally that path raises, remotely it returned ("", n, secs) and broadcast an empty box. `EngineAgentClient` now raises on empty text → drop-with-cooldown handles it, and the must-say hold retries the call.
+- **Pass 3 — auth flip → DESCOPED, documented.** See the Decisions row. The remaining technical risk (does the engine's ToolboxToolset attach identity tokens?) wasn't worth burning pre-hackathon days to harden a read-only public-data query surface in an ephemeral project. Descope is visible: production note in tools.yaml/DEMO, talking point about proportional security.
+- **The quota post-mortem (humbling, instructive):** a 5× session showed GenerateContent errors with no "429" anywhere in the logs — quota was wrongly ruled out until `protoPayload.status` showed `code: 8` = gRPC RESOURCE_EXHAUSTED, which IS the 429 wearing its gRPC name. The chunk-7 finding held all along; "5× worked all day" just meant the SHARED Qwiklabs quota pool had headroom earlier. Two transient `Tool 'X' not found` errors fell inside the same storm window with ZERO failing requests at fe-toolbox (toolset load died client-side, never reached the server) — secondary, self-healing under drop policy, not chased. Operating guidance: 1× demos, 2× trigger dev, 5× lossy in proportion to quota-pool neighbors.
+
 ---
 
 ## In progress
 
-**Chunk 13 — Frontend to Cloud Run + auth flip.** Containerize and deploy the frontend; switch it (via env) from local InMemoryRunner to the deployed engine; flip Toolbox to authenticated (service-account invoker); tighten State Writer auth. Output: the full demo URL.
+**Chunk 14 — Demo dry run.** Laps 1–10 at 1.0× against the fully deployed stack (the real demo condition — and the soak test for chunks 12-13). Capture what the agent says; grade persona, must-say coverage, and latency; feed any wording fixes back through prompts.py (note: persona changes now require an engine redeploy — batch them).
 
 ---
 
@@ -248,7 +262,6 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 13 | Frontend → Cloud Run, auth flip | Toolbox to authenticated, service account invoker bindings, State Writer auth tightened, full demo URL |
 | 14 | Demo dry run | Laps 1–10 at 1.0× speed; capture what the agent says |
 | 15 | *(Stretch)* | BQML AM score tool; Gemini Live spike |
 
@@ -336,6 +349,27 @@ These didn't make the build doc but matter for downstream work:
 **Agent Engine service agent is created by the first deploy:**
 - `service-PROJECT_NUMBER@gcp-sa-aiplatform-re.iam.gserviceaccount.com` doesn't exist until an engine has been deployed in the project — so grant its Firestore role AFTER the deploy step. Post-deploy granting is idempotent on updates; pre-deploy granting fails on a fresh project.
 
+**The agent_engines SDK blocks the event loop — async_* variants included (chunk 13, observed live):**
+- Calling the deployed engine from an async service stalled the WHOLE shared loop for each call's duration: state broadcasts burst, the lap ring swept in jerks, /api/stt sat unserved 20-30s. The SDK's `async_*` methods did not help.
+- Fix pattern: use the SYNC SDK methods inside `asyncio.to_thread`, one thread per call. On timeout, asyncio abandons the thread (the call completes in background, result discarded) — acceptable for read-only calls, and it IS the drop-a-stale-call policy.
+- Related observation from an engine-side traceback: the Agent Engine runtime executes each query via `runners.py:_asyncio_thread_main` → `asyncio.run(...)` — a fresh worker thread + fresh event loop PER QUERY, server-side. The chunk-6 loop-binding pattern, reintroduced where we can't restructure it. Not implicated in any sustained failure (two transient toolset-load errors in one quota storm, never reproduced), but worth knowing it's there.
+
+**Quota errors don't say "429" in Cloud Logging (chunk 13 post-mortem):**
+- Vertex logs gRPC codes: `protoPayload.status.code: 8` = RESOURCE_EXHAUSTED = the 429. Searching logs for "429" and finding nothing PROVES NOTHING — a diagnosis was wrongly abandoned on exactly that null result.
+- Corollary: shared Qwiklabs quota headroom varies by the hour with other tenants — "5× worked all day" is evidence about the pool's neighbors, not about your system.
+
+**Dev-vs-deployed IAM gap — Speech-to-Text V2 (Fork 4 candidate):**
+- STT V2 recognizers are IAM RESOURCES: recognizing via the `_` default recognizer requires `roles/speech.client` on the caller. In Cloud Shell the student account's broad roles mask this; a dedicated Cloud Run SA fails with the UI's polite "Didn't catch that" degradation. TTS has no equivalent resource-level IAM, so voice OUT keeps working while voice IN dies — a nicely confusing asymmetry to teach.
+
+**Cloud Run flags that are architecture, not tuning (frontend):**
+- A service with BACKGROUND TASKS (engineer loop, state poller) needs: `--min-instances=1` (scale-to-zero kills the loop), `--max-instances=1` (N instances = N engineers making duplicate radio calls), `--no-cpu-throttling` (request-based throttling freezes background work between requests; switches to instance-based billing). Cloud Run's defaults assume request/response; a service with a background brain needs all three.
+
+**Source deploy vs explicit Dockerfile (monorepo lesson):**
+- `gcloud run deploy --source` works when the directory IS the app (simulator repo). It cannot build a service that COPYs sibling packages (`shared/`, `agent/`): pointing it at the subdir puts the build context below the files it needs; pointing it at the root can't host two services' Dockerfiles; Buildpacks would install the dev requirements.txt (ADK/Toolbox bloat + the package-import trap). Pattern: build context at repo root, `gcloud builds submit --config` with `-f <service>/Dockerfile`. Both paths produce an image in Artifact Registry — the only difference is who writes the build recipe. Buildpacks' failure mode (`ModuleNotFoundError: shared`) doesn't explain itself.
+
+**Engine runs that fail mid-flight can end with NO error event and NO text:**
+- stream_query just... ends. Treat empty final text as failure (raise → drop policy), or the UI displays empty radio calls. Locally the same failures raise; the remote surface swallows them.
+
 **`adk deploy agent_engine` stages only the target folder:**
 - `source_packages` = [the folder you point it at], unconditionally — no extra-packages mechanism in this CLI generation. Any top-level repo packages the agent imports must be VENDORED into the staged folder (with imports rewritten if the package path changes). The generated app does `from .agent import root_agent`, so the staged folder must contain an `agent.py` exposing that name.
 
@@ -402,11 +436,10 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 10 — TTS (Chirp 3 HD via radio_broadcast wrapper; digits normalization; DEMO.md)
 - [x] Chunk 11 — STT push-to-talk (Chirp 2, spacebar PTT, visible transcript; enable_apis.sh)
 - [x] Chunk 12 — agent to Agent Engine (build_engine_app vendoring, deploy script + .engine_resource, engine_smoke green; project-number Firestore gotcha fixed)
-- [ ] README final pass — discuss structure before writing (quick start, architecture map, pointer to DEMO.md/PROGRESS.md, lab setup order incl. enable_apis.sh as step zero); do this when the architecture stops moving (post-chunk-13)
-- [ ] README rewrite — deliberate end-of-project pass; discuss structure and audience first (quick start vs pointers to DEMO.md / PROGRESS; student vs instructor reader)
-- [ ] README rewrite at the end (chunk 14 era): discuss structure first — setup path (enable_apis.sh as step zero), architecture overview, run instructions, pointers to DEMO.md and PROGRESS.md; write once the deploy story (chunks 12-13) is settled
-- [ ] Chunk 13 — frontend to Cloud Run, auth flip
+- [x] Chunk 13 — frontend to Cloud Run (agent_client seam + AGENT_MODE, sync-in-thread engine calls, Dockerfile/deploy script, speech.client IAM, empty-response drop; auth flip descoped + documented)
+- [x] Write the Toolbox production note (tools.yaml header comment + DEMO.md aside): how to flip auth on, and why the lab leaves it open
 - [ ] Chunk 14 — demo dry run
+- [ ] README rewrite — UNBLOCKED (deploy story settled post-chunk-13). Discuss structure and audience first (student vs instructor reader), then write: setup path with enable_apis.sh as step zero, architecture overview (current: engine + Cloud Run frontend, not the stale diagram), run instructions for both AGENT_MODEs, pointers to DEMO.md and PROGRESS.md. Best done after chunk 14 so the run instructions are dry-run-proven.
 - [ ] Chunk 15 — stretch (BQML, Gemini Live)
 - [ ] Once Fork 2 wraps: fold `PROGRESS.md` findings into the main build doc Decision Log + Gotchas
 

@@ -164,6 +164,19 @@ different stores.
   by position-adjacency scoring, fixed end to end. Ask the instructors
   about it; it is the best gotcha in the dataset.
 
+## Security posture (you will be asked)
+
+The Toolbox endpoint is public. That's a decision, not an oversight — and
+the reasoning is the teaching point. Security effort should be proportional
+to what's at risk: every Toolbox tool is a read-only SELECT over public
+2024 sports data, in an ephemeral lab project, behind an unguessable URL.
+Worst case, a stranger spends pennies of BigQuery scan. Compare the State
+Writer, where an unauthenticated caller could corrupt race state — so THAT
+service got locked down (OIDC-authenticated Pub/Sub push, no public
+ingress). Same stack, two postures, each matched to its threat model. The
+production lockdown recipe lives in a comment at the top of
+`toolbox/tools.yaml`.
+
 ## Troubleshooting
 
 | Symptom | Cause | Fix |
