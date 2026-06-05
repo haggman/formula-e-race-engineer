@@ -14,7 +14,9 @@ Run (public demo URL), talking to the engine via the AGENT_MODE seam.
 Triggers, Q&A, TTS, and push-to-talk all verified against the deployed
 stack at 2× and 5×. Toolbox lockdown was descoped on purpose (read-only
 public data, ephemeral lab project) and documented as a production note.
-Next: chunk 14 — the demo dry run at 1×, which doubles as the soak test.
+Chunks 14-15 skipped by decision: the Fork 2 BUILD is complete. Current
+effort is Phase 2 — packaging for the 3-hour hackathon room (see In
+progress and docs/PACKAGING_BRIEF.md).
 
 ---
 
@@ -254,16 +256,27 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 
 ## In progress
 
-**Chunk 14 — Demo dry run.** Laps 1–10 at 1.0× against the fully deployed stack (the real demo condition — and the soak test for chunks 12-13). Capture what the agent says; grade persona, must-say coverage, and latency; feed any wording fixes back through prompts.py (note: persona changes now require an engine redeploy — batch them).
+**Fork 2 build: COMPLETE.** Chunks 14 (dry run) and 15 (BQML, Gemini Live)
+skipped by decision on 2026-06-05 — the stack is functionally complete and
+deployed through chunk 13. The stretch items remain documented above if
+ever revisited.
+
+**Phase 2: PACKAGING (new effort, separate planning conversation).** Turn
+the reference into the hackathon product: numbered setup scripts, student
+starter package, RUN_OF_SHOW.md (instructor) + STUDENT_GUIDE.md. Planning
+brief: `docs/PACKAGING_BRIEF.md`. Event constraints: 3 hours (20 min open /
+2:30 build / 10 min wrap), provided Qwiklabs projects (per-student or
+per-team), developer audience with solid Python and limited GCP-AI
+exposure, standalone event (no cross-challenge assumptions), quota
+explicitly NOT a concern.
 
 ---
 
 ## Up next
 
-| # | Chunk | What it produces |
-|---|---|---|
-| 14 | Demo dry run | Laps 1–10 at 1.0× speed; capture what the agent says |
-| 15 | *(Stretch)* | BQML AM score tool; Gemini Live spike |
+Phase 2 packaging chunks — to be planned in the packaging conversation
+(provisional: P1 setup scripts, P2 starter extraction, P3 the two docs,
+P4 instructor-path rehearsal).
 
 ---
 
@@ -437,11 +450,12 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 11 — STT push-to-talk (Chirp 2, spacebar PTT, visible transcript; enable_apis.sh)
 - [x] Chunk 12 — agent to Agent Engine (build_engine_app vendoring, deploy script + .engine_resource, engine_smoke green; project-number Firestore gotcha fixed)
 - [x] Chunk 13 — frontend to Cloud Run (agent_client seam + AGENT_MODE, sync-in-thread engine calls, Dockerfile/deploy script, speech.client IAM, empty-response drop; auth flip descoped + documented)
-- [x] Write the Toolbox production note (tools.yaml header comment + DEMO.md aside): how to flip auth on, and why the lab leaves it open
-- [ ] Chunk 14 — demo dry run
-- [ ] README rewrite — UNBLOCKED (deploy story settled post-chunk-13). Discuss structure and audience first (student vs instructor reader), then write: setup path with enable_apis.sh as step zero, architecture overview (current: engine + Cloud Run frontend, not the stale diagram), run instructions for both AGENT_MODEs, pointers to DEMO.md and PROGRESS.md. Best done after chunk 14 so the run instructions are dry-run-proven.
-- [ ] Chunk 15 — stretch (BQML, Gemini Live)
+- [ ] Write the Toolbox production note (tools.yaml header comment + DEMO.md aside): how to flip auth on, and why the lab leaves it open — text blocks already drafted, just needs pasting
+- [ ] README rewrite — UNBLOCKED (deploy story settled post-chunk-13). Likely absorbed into Phase 2's STUDENT_GUIDE/RUN_OF_SHOW split; decide there before writing anything.
+- [ ] Phase 2 packaging (separate planning conversation — see docs/PACKAGING_BRIEF.md)
 - [ ] Once Fork 2 wraps: fold `PROGRESS.md` findings into the main build doc Decision Log + Gotchas
+
+Skipped by decision (2026-06-05): chunk 14 formal dry run (stack exercised at 2×/5× through chunk 13 — Phase 2's instructor-path rehearsal covers a full 1× pass) and chunk 15 stretch items (BQML AM score tool, Gemini Live spike).
 
 ---
 
