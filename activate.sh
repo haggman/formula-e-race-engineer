@@ -60,23 +60,36 @@ export GOOGLE_GENAI_USE_VERTEXAI=1
 export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
 export GOOGLE_CLOUD_LOCATION=global
 
-# --- Vertex AI / ADK ---
-export GOOGLE_GENAI_USE_VERTEXAI=1
-export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
-export GOOGLE_CLOUD_LOCATION=global
-
 # --- MCP Toolbox URL (auto-discovered from Cloud Run) ---
 export TOOLBOX_URL="${TOOLBOX_URL:-$(gcloud run services describe fe-toolbox --region "$REGION" --format='value(status.url)' 2>/dev/null)}"
+
+# --- Agent mode (chunk 13) ---
+# local  = InMemoryRunner in-process (the dev path, default)
+# engine = the deployed Agent Engine (set AGENT_MODE=engine before sourcing,
+#          or per-run: AGENT_MODE=engine uvicorn frontend.main:app ...)
+export AGENT_MODE="${AGENT_MODE:-local}"
+
+# Engine resource name — auto-loaded from the deploy script's record.
+ENGINE_RESOURCE_FILE="${REPO_ROOT}/deploy/.engine_resource"
+if [[ -z "${AGENT_ENGINE_RESOURCE:-}" && -f "$ENGINE_RESOURCE_FILE" ]]; then
+    export AGENT_ENGINE_RESOURCE="$(tr -d '[:space:]' < "$ENGINE_RESOURCE_FILE")"
+fi
 
 # --- Status ---
 echo ""
 echo "=================================================================="
 echo "  formula-e-race-engineer activated"
 echo "=================================================================="
-echo "  Project: $PROJECT_ID"
-echo "  Region:  $REGION"
-echo "  Venv:    $VENV_DIR"
-echo "  Python:  $(python3 --version)"
+echo "  Project:    $PROJECT_ID"
+echo "  Region:     $REGION"
+echo "  Venv:       $VENV_DIR"
+echo "  Python:     $(python3 --version)"
+echo "  Agent mode: $AGENT_MODE"
+if [[ -n "${AGENT_ENGINE_RESOURCE:-}" ]]; then
+    echo "  Engine:     $AGENT_ENGINE_RESOURCE"
+else
+    echo "  Engine:     (none — deploy/deploy_agent_engine.sh records one)"
+fi
 echo "=================================================================="
 echo ""
 echo "To deactivate: 'deactivate'"

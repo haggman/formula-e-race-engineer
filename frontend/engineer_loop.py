@@ -1,14 +1,18 @@
-"""The engineer's trigger loop as a service component (chunk 9, Pass 2).
+"""The engineer's trigger loop as a service component (chunk 9, Pass 2;
+chunk 13 rewires invocation through frontend/agent_client.py).
 
 This is scripts/local_test.py's loop, re-homed: poll Firestore → score with
 shared.scorer → fire the agent on triggers — except deliveries are broadcast
 over the websocket as {type: "radio"} messages instead of printed. All the
 chunk 8 policy survives intact: per-type debounce, the pending must-say hold
 (fresh snapshot at delivery, TTL expiry), the overdue-summary guarantee, the
-hard tool-budget ceiling, and drop-don't-crash on failures.
+tool/time budget, and drop-don't-crash on failures.
 
-Pass 3 adds ask() — user Q&A through the same runner with a persistent
-session, per the locked session-management decision.
+Chunk 13: the loop no longer owns an ADK runner. It calls
+agent_client.fire()/ask() and doesn't know whether the agent runs in-process
+(AGENT_MODE=local) or on the deployed Agent Engine (AGENT_MODE=engine). The
+budget mechanism differs by mode — RunConfig ceiling locally, wall-clock
+timeout remotely — but the loop's drop-on-failure handling covers both.
 """
 from __future__ import annotations
 
@@ -16,14 +20,8 @@ import asyncio
 import json
 import logging
 import time
-import uuid
 from typing import Awaitable, Callable
 
-from google.adk.agents.run_config import RunConfig
-from google.adk.runners import InMemoryRunner
-from google.genai import types
-
-from agent.race_engineer.agent import root_agent
 from agent.race_engineer.config import OUR_CAR_NUMBER
 from agent.race_engineer.prompts import (
     build_event_reaction_prompt,
@@ -31,19 +29,15 @@ from agent.race_engineer.prompts import (
 )
 from agent.race_engineer.snapshot import snapshot_dict
 from agent.race_engineer.tools.state_client import get_state_client
+from frontend.agent_client import make_agent_client
 from shared.models import EventType
 from shared.scorer import DEFAULT_THRESHOLD, score
 
 logger = logging.getLogger("engineer")
 
-APP_NAME = "race_engineer_frontend"
-USER_ID = "pit_wall"
 AM_LOOKBACK_S = 30
 FAIL_COOLDOWN_S = 5
 MUST_SAY_TTL_S = 25
-MAX_LLM_CALLS_PER_TRIGGER = 4
-MAX_LLM_CALLS_PER_QA = 12     # human-initiated: research allowed, runaway not
-QA_SESSION_ID = "pit-wall-qa" # persistent — Q&A keeps conversational context
 
 Broadcast = Callable[[dict], Awaitable[None]]
 
@@ -67,38 +61,17 @@ class EngineerLoop:
         self.must_say_gap_s = must_say_gap_s
         self.summary_every = summary_every
         self.poll_s = poll_s
-        self.runner = InMemoryRunner(agent=root_agent, app_name=APP_NAME)
         self.client = get_state_client()
-        self._qa_session_ready = False
+        self.agent = make_agent_client()  # local or engine, per AGENT_MODE
 
     # ------------------------------------------------------------------
     # Agent invocation
     # ------------------------------------------------------------------
 
-    async def _fire(self, prompt: str) -> tuple[str, int, float]:
-        session_id = f"trigger-{uuid.uuid4().hex[:8]}"
-        await self.runner.session_service.create_session(
-            app_name=APP_NAME, user_id=USER_ID, session_id=session_id
-        )
-        msg = types.Content(role="user", parts=[types.Part(text=prompt)])
-        t0 = time.monotonic()
-        tool_calls = 0
-        final: list[str] = []
-        async for event in self.runner.run_async(
-            user_id=USER_ID, session_id=session_id, new_message=msg,
-            run_config=RunConfig(max_llm_calls=MAX_LLM_CALLS_PER_TRIGGER),
-        ):
-            tool_calls += len(event.get_function_calls())
-            if event.is_final_response() and event.content and event.content.parts:
-                for part in event.content.parts:
-                    if getattr(part, "text", None):
-                        final.append(part.text)
-        return "".join(final).strip(), tool_calls, time.monotonic() - t0
-
     async def _deliver(self, kind: str, prompt: str, now_s: int, lap, reason: str) -> bool:
         """Fire the agent; broadcast the call. False (and cooldown) on failure."""
         try:
-            text, tools, secs = await self._fire(prompt)
+            text, tools, secs = await self.agent.fire(prompt)
         except Exception as e:
             logger.warning("call dropped (%s): %s", kind,
                            str(e).splitlines()[0][:160] if str(e) else type(e).__name__)
@@ -117,22 +90,7 @@ class EngineerLoop:
         """Pit-wall Q&A. Persistent session (follow-ups keep context); the
         agent fetches whatever it needs — triggers carry snapshots, questions
         don't. Raises on failure; the websocket layer reports it."""
-        if not self._qa_session_ready:
-            await self.runner.session_service.create_session(
-                app_name=APP_NAME, user_id=USER_ID, session_id=QA_SESSION_ID
-            )
-            self._qa_session_ready = True
-        msg = types.Content(role="user", parts=[types.Part(text=question)])
-        final: list[str] = []
-        async for event in self.runner.run_async(
-            user_id=USER_ID, session_id=QA_SESSION_ID, new_message=msg,
-            run_config=RunConfig(max_llm_calls=MAX_LLM_CALLS_PER_QA),
-        ):
-            if event.is_final_response() and event.content and event.content.parts:
-                for part in event.content.parts:
-                    if getattr(part, "text", None):
-                        final.append(part.text)
-        return "".join(final).strip()
+        return await self.agent.ask(question)
 
     # ------------------------------------------------------------------
     # The loop
@@ -277,4 +235,4 @@ class EngineerLoop:
             await asyncio.sleep(self.poll_s)
 
     async def close(self) -> None:
-        await self.runner.close()
+        await self.agent.close()
