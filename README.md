@@ -1,57 +1,66 @@
-# Formula E Race Engineer Agent
+# Formula E Race Engineer Agent — Challenge 2
 
-ADK-based AI agent that acts as an autonomous race engineer copilot during a streamed replay of Formula E Berlin 2024 (Season 10, Round 10). The agent advises Car #13 (António Félix da Costa, eventual winner) on energy management, Attack Mode strategy, and situational awareness — delivering spoken recommendations and answering driver questions in real time.
+An AI race engineer for car #13 (António Félix da Costa) during a streamed
+replay of Formula E Berlin 2024, Round 10. A deterministic scorer decides
+WHEN the engineer speaks; a Gemini agent (Google ADK) decides WHAT to say —
+grounded in live race state from Firestore and the recorded race history in
+BigQuery, delivered as spoken radio calls with push-to-talk Q&A. This repo
+is both the complete reference solution and the 3-hour hackathon built
+around it: students receive the data plane, the pit-wall frontend, and the
+trigger system, and build the agent in the middle.
 
-This is **Challenge 2** of the seven-challenge Google Cloud + Formula E hackathon series. The reference solution in this repo is what students build toward.
+## Where to go (pick your reader)
+
+| You are... | Read |
+|---|---|
+| **In the hackathon room, building** | [`STUDENT_GUIDE.md`](STUDENT_GUIDE.md) — the tiers, the commands, the context |
+| **Running the event** | [`RUN_OF_SHOW.md`](RUN_OF_SHOW.md) — morning-of, the 20-min opening, checkpoints |
+| **Demoing the system** | [`DEMO.md`](DEMO.md) — choreography, question bank, Attack Mode explainer |
+| **Understanding how it was built** | [`PROGRESS.md`](PROGRESS.md) — the full build record, decisions, and gotchas |
+| **Working on the packaging** | [`PACKAGING.md`](PACKAGING.md) — the living Phase 2 record |
+
+## Quick start
+
+```bash
+source activate.sh        # venv + env (run in every new Cloud Shell tab)
+bash setup/all.sh         # deploy the full data plane (~20-30 min) + verify
+```
+
+Optional instructor extras (Agent Engine + public Cloud Run pit wall):
+`bash setup/7_deploy_cloud.sh`
 
 ## Architecture
 
 ```
-[fe-simulator on Cloud Run]
-    └── publishes 1 Hz frames to Pub/Sub fe-telemetry
-                                │
-[Frontend on Cloud Run] ◄───────┘
-    ├── Pub/Sub subscriber maintains race state
-    ├── Significance scorer decides when to trigger agent
-    ├── Browser UI: live state, transcript, text + voice Q&A
-    └── Calls agent on three triggers:
-            • significant event
-            • end-of-lap summary
-            • user Q&A
-                                │
-[ADK Race Engineer Agent on Agent Engine, global] ◄─┘
-    Model: gemini-3-flash-preview
-    ├── Frame-state tools (current state, recent events, field AM)
-    └── MCP Toolbox: 8 curated BQ queries + 1 SQL escape hatch
+[simulator on Cloud Run] → Pub/Sub → [State Writer on Cloud Run] → Firestore
+                                                                       ↑
+[Pit-wall frontend: FastAPI + websocket UI, scorer, TTS/STT] ──────────┘
+        └── invokes → [ADK Race Engineer agent: gemini-3.5-flash]
+                          ├── frame tools → Firestore (the live "now")
+                          └── MCP Toolbox → BigQuery  (the recorded "then":
+                              14 curated tools + schema discovery + SQL)
 ```
 
-## Tech stack
+The agent runs in-process during development (`AGENT_MODE=local`) or on
+Vertex AI Agent Engine (`AGENT_MODE=engine`, the deployed demo path). The
+`AGENT_PACKAGE` env var selects WHICH agent the system loads:
+`starter.race_engineer` (the student build — the default) or
+`solution.race_engineer` (the complete reference).
 
-Google ADK · Vertex AI Agent Engine · MCP Toolbox for Databases · BigQuery · Cloud Run · Cloud Pub/Sub · Cloud Text-to-Speech (Chirp 3 HD, en-GB) · Cloud Speech-to-Text v2
+## Repo map
 
-## Companion repos
-
-- **Simulator**: [haggman/formula-e-simulator](https://github.com/haggman/formula-e-simulator) — must be deployed in your lab project before running the agent
-
-## Quick start
-
-Set up your environment (creates venv, installs requirements, sets REGION + PROJECT_ID):
-
-    source activate.sh
-
-Verify it worked:
-
-    bash scripts/env_check.sh
-
-Then follow `PROGRESS.md` for the step-by-step build sequence.
+`solution/` the reference agent · `starter/` the student package ·
+`frontend/` the pit wall · `shared/` models, scorer, the package seam ·
+`state_writer/` Pub/Sub→Firestore · `simulator/` the race replayer ·
+`toolbox/` the BigQuery tool definitions · `setup/` numbered event setup ·
+`deploy/` the underlying deploy scripts · `scripts/` dev + test harnesses ·
+`notebooks/` BigQuery loading
 
 ## Race context
 
-- **Race**: Berlin 2024 E-Prix Round 10 (Season 10), May 12, 2024
-- **Length**: 41 laps, 2868 seconds (~47:48)
-- **Winner**: Car #13 António Félix da Costa
-- **Demo stint**: Laps 1–10, anchored by the lap-3 Attack Mode cluster
-- **Replay speed**: 5× default for student work, 1× for instructor demo
+Berlin 2024 E-Prix Round 10 (Season 10) — 41 laps, ~48 minutes. Car #13
+starts P10 and wins. Demo stint: laps 1–10, anchored by the lap-3 Attack
+Mode cluster. Replay speed: 2× to build, 1× to demo.
 
 ## License
 

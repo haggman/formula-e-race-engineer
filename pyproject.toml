@@ -13,5 +13,5 @@ requires-python = ">=3.10"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["shared*", "solution*", "state_writer*"]
-exclude = [".venv*", "toolbox*", "notebooks*", "scripts*", "deploy*"]
+include = ["shared*", "solution*", "starter*", "state_writer*"]
+exclude = [".venv*", "toolbox*", "notebooks*", "scripts*", "deploy*", "simulator*", "build*"]

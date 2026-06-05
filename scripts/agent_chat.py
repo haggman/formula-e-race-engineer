@@ -2,9 +2,14 @@
 
 Runs the agent in a persistent session and prints EVERY tool call with its
 exact arguments and a truncated response, inline with the conversation.
-This is the development loop for chunks 7-8: the printed transcript shows
+This is the primary T1-T2 testing surface: the printed transcript shows
 whether the model passed sane arguments (e.g. the right through_time_ns),
 not just whether the final answer sounds plausible.
+
+WHICH AGENT: resolved through the AGENT_PACKAGE seam (shared/agent_pkg.py).
+activate.sh defaults to starter.race_engineer — the student build. To chat
+with the reference instead:
+    AGENT_PACKAGE=solution.race_engineer python scripts/agent_chat.py
 
 Fully async with ONE event loop for the whole session — required because
 ToolboxToolset's HTTP client binds to the loop it first runs on. (The sync
@@ -35,7 +40,9 @@ import uuid
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from solution.race_engineer.agent import root_agent
+from shared.agent_pkg import AGENT_PACKAGE, agent_module
+
+root_agent = agent_module("agent").root_agent
 
 APP_NAME = "race_engineer_chat"
 USER_ID = "dev"
@@ -82,7 +89,7 @@ async def ask(
 async def amain(resp_limit: int) -> None:
     runner = InMemoryRunner(agent=root_agent, app_name=APP_NAME)
     session_id = await make_session(runner)
-    print(f"Race Engineer chat — session {session_id}")
+    print(f"Race Engineer chat — package {AGENT_PACKAGE}, session {session_id}")
     print("Tool calls print inline. /new = fresh session, /quit = exit.\n")
 
     while True:

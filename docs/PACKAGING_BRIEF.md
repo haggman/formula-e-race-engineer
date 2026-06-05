@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-06-05):** this brief opened Phase 2. Every open question in it is now settled in `PACKAGING.md` at the repo root — the living Phase 2 record. Kept for history.
+
 # Packaging Brief — Phase 2 of the Formula E Race Engineer (Challenge 2)
 
 **Purpose of this document:** hand off from the Fork 2 build conversation to

@@ -46,7 +46,6 @@ Engine-mode design notes:
 from __future__ import annotations
 
 import asyncio
-import importlib
 import logging
 import os
 import time
@@ -68,34 +67,12 @@ ASK_TIMEOUT_S = float(os.environ.get("ASK_TIMEOUT_S", "75"))
 
 
 # ============================================================================
-# The package seam (packaging P1.2): starter vs solution
+# The package seam (P1.2; relocated to shared/agent_pkg.py in P1.4 so the dev
+# scripts resolve the same package). Re-exported here because engineer_loop
+# and main import it from this module.
 # ============================================================================
 
-AGENT_PACKAGE = os.environ.get("AGENT_PACKAGE", "solution.race_engineer").strip()
-
-
-def agent_module(sub: str = ""):
-    """Import a module from the ACTIVE agent package.
-
-    agent_module("config")             -> e.g. solution.race_engineer.config
-    agent_module("tools.state_client") -> e.g. solution.race_engineer.tools.state_client
-    agent_module("agent")              -> the module exposing root_agent
-
-    Both packages mirror the same file layout, so every caller works
-    unchanged whichever package AGENT_PACKAGE selects. Raises ImportError
-    with the resolved name on a typo'd or missing package — fail loudly,
-    don't fall back.
-    """
-    name = AGENT_PACKAGE + (f".{sub}" if sub else "")
-    try:
-        return importlib.import_module(name)
-    except ImportError as e:
-        raise ImportError(
-            f"AGENT_PACKAGE={AGENT_PACKAGE!r}: could not import {name!r}. "
-            "Valid values are 'solution.race_engineer' (the reference) or "
-            "'starter.race_engineer' (the student build). Did you run "
-            "'pip install -e .' after changing packages?"
-        ) from e
+from shared.agent_pkg import AGENT_PACKAGE, agent_module  # noqa: F401  (re-export)
 
 
 # ============================================================================

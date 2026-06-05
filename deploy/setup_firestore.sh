@@ -3,6 +3,17 @@
 #
 # Idempotent: safe to re-run. Skips creation if database already exists.
 #
+# Index builds are submitted ASYNC and this script returns immediately:
+# nothing else in setup depends on the indexes (only event QUERIES do, and
+# those happen minutes later when an agent runs). setup/verify.sh confirms
+# readiness as its final check, with a bounded wait.
+#
+# (The previous version polled gcloud for index state here. The poll's
+# --filter="collectionGroup=..." key doesn't resolve in current gcloud,
+# so READY was never detected and every run burned the full 15-minute
+# timeout. Readiness checking now lives in setup/verify_checks.py, via the
+# Firestore admin API — structured data, no text scraping.)
+#
 # Required env vars (set by sourcing activate.sh):
 #   PROJECT_ID, REGION
 
@@ -59,15 +70,7 @@ else
     echo "    created"
 fi
 
-# --- Composite indexes ---
-echo ""
-echo ">>> Creating composite indexes on race_events..."
-echo "    (indexes build async — may take 1-2 minutes after this script returns)"
-
-# Helper: create an index if it doesn't already exist.
-# gcloud's `create` is not idempotent — it errors if a matching index exists.
-# We detect this via grep on the error and treat it as success.
-# --- Composite indexes ---
+# --- Composite indexes (submitted async; verify.sh checks readiness) ---
 echo ""
 echo ">>> Submitting composite index creates (async)..."
 
@@ -106,41 +109,9 @@ create_index "race_id + car_number + race_time_s (desc)" \
     --field-config=field-path=race_time_s,order=descending
 
 echo ""
-echo ">>> Waiting for indexes to build..."
-echo "    Firestore builds indexes in parallel. For ~14 docs, expect under a minute,"
-echo "    but Firestore can sometimes take 5-10 minutes regardless of doc count."
-echo ""
-
-TIMEOUT_S=900     # 15 minutes — Firestore can be slow even on tiny data
-INTERVAL=10
-ELAPSED=0
-EXPECTED=3
-
-while (( ELAPSED < TIMEOUT_S )); do
-    # Pull all race_events index states in one call, count by status.
-    STATE_LIST=$(gcloud firestore indexes composite list \
-        --database="$DATABASE_ID" \
-        --project="$PROJECT_ID" \
-        --filter="collectionGroup=race_events" \
-        --format='value(state)' 2>/dev/null)
-
-    READY_COUNT=$(echo "$STATE_LIST" | grep -c '^READY$' || true)
-    CREATING_COUNT=$(echo "$STATE_LIST" | grep -c '^CREATING$' || true)
-    TOTAL_COUNT=$(echo "$STATE_LIST" | grep -c '.' || true)
-
-    if (( READY_COUNT >= EXPECTED )); then
-        echo "    ✓ All ${EXPECTED} indexes READY (after ${ELAPSED}s)"
-        break
-    fi
-
-    echo "    ⏳ ${READY_COUNT}/${EXPECTED} ready, ${CREATING_COUNT} building, ${TOTAL_COUNT} total visible (${ELAPSED}s elapsed)"
-    sleep $INTERVAL
-    ELAPSED=$((ELAPSED + INTERVAL))
-done
-
-if (( READY_COUNT < EXPECTED )); then
-    echo "    ⚠ Polled for ${TIMEOUT_S}s and only ${READY_COUNT}/${EXPECTED} ready."
-    echo "    Indexes are still building in the background — they will become available."
-    echo "    Check status with:"
-    echo "      gcloud firestore indexes composite list --database=$DATABASE_ID --project=$PROJECT_ID"
-fi
+echo ">>> Done. Index builds run in Firestore's background (typically 1-10"
+echo "    minutes, occasionally longer). Nothing else in setup waits on them;"
+echo "    setup/verify.sh confirms readiness as its final check."
+echo "    Watch manually any time:"
+echo "      gcloud firestore indexes composite list --database='$DATABASE_ID' \\"
+echo "          --project=$PROJECT_ID --format='table(name.basename(),state)'"

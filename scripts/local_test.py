@@ -1,8 +1,14 @@
 """Local trigger harness — the agent decides when to speak (chunks 7-8).
 
-The loop that the chunk 9 frontend will reimplement around a websocket:
+The loop the frontend's engineer_loop reimplements around a websocket:
   poll Firestore → score with shared.scorer → fire the agent on triggers →
   print radio calls.
+
+WHICH AGENT: resolved through the AGENT_PACKAGE seam (shared/agent_pkg.py)
+— with activate.sh defaults this drives YOUR starter agent, which makes it
+the fast T4 surface for trigger tuning: edit shared/scorer.py weights or
+your prompts, rerun, read the transcript. To run the reference instead:
+    AGENT_PACKAGE=solution.race_engineer python scripts/local_test.py ...
 
 Firing policy (chunk 8, per-type debounce):
   1. MUST-SAY events (our AM transitions, critical/our-car race control)
@@ -12,15 +18,14 @@ Firing policy (chunk 8, per-type debounce):
   3. Normal scored events fire above --threshold after --debounce.
   4. On-time lap summaries fill the remaining quiet moments.
 
-Per the locked session decision, every proactive call runs in a FRESH agent
-session. The triggering snapshot (state + events) rides in the prompt, so
-the agent doesn't re-fetch a world that has moved on, and proactive calls
-stay within a small tool budget — enforced three ways: prompt language
-(soft), RunConfig(max_llm_calls) per trigger (hard ceiling), and
-drop-on-breach via safe_fire (a stale call is worse than a missed one).
+Every proactive call runs in a FRESH agent session. The triggering snapshot
+(state + events) rides in the prompt, so the agent doesn't re-fetch a world
+that has moved on, and proactive calls stay within a small tool budget —
+enforced three ways: prompt language (soft), RunConfig(max_llm_calls) per
+trigger (hard ceiling), and drop-on-breach via safe_fire (a stale call is
+worse than a missed one).
 
-Usage (simulator running; 2x replay recommended for trigger work —
-5x outruns Qwiklabs Gemini quota):
+Usage (simulator running; 2x replay recommended for trigger work):
     python scripts/local_test.py --duration 380 --verbose
 
 Notes:
@@ -44,16 +49,18 @@ from google.adk.agents.run_config import RunConfig
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from solution.race_engineer.agent import root_agent
-from solution.race_engineer.config import OUR_CAR_NUMBER, race_time_to_wall_ns
-from solution.race_engineer.prompts import (
-    build_event_reaction_prompt,
-    build_lap_summary_prompt,
-)
-from solution.race_engineer.snapshot import snapshot_dict
-from solution.race_engineer.tools.state_client import get_state_client
+from shared.agent_pkg import AGENT_PACKAGE, agent_module
 from shared.models import EventType, RaceState
 from shared.scorer import DEFAULT_THRESHOLD, TriggerType, score
+
+# --- resolved through the AGENT_PACKAGE seam (starter vs solution) ---
+root_agent = agent_module("agent").root_agent
+OUR_CAR_NUMBER = agent_module("config").OUR_CAR_NUMBER
+_prompts = agent_module("prompts")
+build_event_reaction_prompt = _prompts.build_event_reaction_prompt
+build_lap_summary_prompt = _prompts.build_lap_summary_prompt
+snapshot_dict = agent_module("snapshot").snapshot_dict
+get_state_client = agent_module("tools.state_client").get_state_client
 
 APP_NAME = "race_engineer_local_test"
 USER_ID = "harness"
@@ -117,8 +124,9 @@ async def amain(args: argparse.Namespace) -> None:
     fired_by = Counter()
     suppressed = failed = 0
 
-    print(f"Local trigger harness — threshold={args.threshold}, "
-          f"debounce={args.debounce}s, must-say gap={args.must_say_gap}s, "
+    print(f"Local trigger harness — package={AGENT_PACKAGE}, "
+          f"threshold={args.threshold}, debounce={args.debounce}s, "
+          f"must-say gap={args.must_say_gap}s, "
           f"summary every {args.summary_every} laps, duration={args.duration}s")
     print("Polling for triggers...\n")
 

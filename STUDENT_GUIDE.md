@@ -25,16 +25,9 @@ on a dead gcloud filter key) and P1.6.1 (the engine staging stale-check
 false positive on agent_pkg.py). Both fixes made the failing CHECK
 structurally smarter rather than looser — a pattern worth keeping.
 
-P2 (docs) is fully delivered: STUDENT_GUIDE.md, RUN_OF_SHOW.md, the README
-router rewrite, the DEMO.md patch (cross-ref header + the
-demo-the-REFERENCE fix — without it the post-P1.4 shell default would have
-an instructor demoing the flat starter), and the SUPERSEDED header on
-docs/PACKAGING_BRIEF.md. RUN_OF_SHOW carries [___] timing cells and three
-[VERIFY IN TEST 1] rows that acceptance Test 1 closes.
+P2 (docs) is open. P2.1 — STUDENT_GUIDE.md — is delivered.
 
-**Next action: P3 — Patrick runs acceptance Test 1 (fresh-project presenter
-run: time every setup step, perform the opening out loud, restart-resilience
-pass), then Test 2 (the student run, tier budgets, peek log).**
+**Next action: review STUDENT_GUIDE.md, then P2.2 RUN_OF_SHOW.md.**
 
 ---
 
@@ -239,8 +232,7 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
 
 ### P2 — Docs
 
-- [x] STUDENT_GUIDE.md — DELIVERED, awaiting Patrick's voice/structure pass
-  (Test 2 is the real review). As written: the
+- [ ] STUDENT_GUIDE.md — DELIVERED, awaiting review. As written: the
   two-worlds framing up front; the deployed-vs-yours line drawn explicitly
   (data plane in GCP, agent + pit wall in Cloud Shell); starter/ vs
   solution/ with the open-answer-key policy stated; self-contained Attack
@@ -251,30 +243,12 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   the arming-events scorer rule is sketched with pointers (get_am_armings,
   scorer.py shape) but not specced to the line — tuning the weights table
   is the floor, the new rule is the ceiling.
-- [x] RUN_OF_SHOW.md — DELIVERED; Test 1 closes its [___] and [VERIFY]
-  items. As written: morning-of
-  command box + per-step timing table ([___] cells for Test 1's measured
-  numbers) + pre-flight checklist (audio unlock and mic permission BEFORE
-  doors — the two silent demo-killers); the 20-minute opening scripted to
-  the minute, with the students-kick-off-setup-first beat stated as a
-  design constraint and the demo choreography (2× laps 1-2 → 1× for the
-  cluster → PAUSE → typed fused question, voice question, weather honesty
-  test → the attack-loop detour told verbally → resume 5×); per-tier
-  checkpoint talking points each paired with a build-finding story
-  (future-leak, overtake identity, prompt-examples-become-vocabulary);
-  wrap format; instructor-grade troubleshooting incl. the gRPC-code-8-is-
-  the-429 row and three [VERIFY IN TEST 1] restart-resilience rows; a
-  closing checklist of exactly what Test 1 must fill in.
-- [x] README router rewrite — DELIVERED: 30-second orientation, per-reader
-  router table, quick start, current architecture (gemini-3.5-flash, 14
-  Toolbox tools, AGENT_MODE + AGENT_PACKAGE), repo map. Stale facts killed
-  (old model name, 8-tool count, companion-repo section).
-- [x] DEMO.md touch-ups — DELIVERED as a verified, assert-guarded patch:
-  RUN_OF_SHOW cross-ref header; run block now exports
-  AGENT_PACKAGE=solution.race_engineer and notes the deployed-pit-wall
-  alternative. (No path fixes needed — DEMO.md never referenced agent/.)
-- [x] Mark docs/PACKAGING_BRIEF.md superseded — DELIVERED (newline-safe
-  prepend in the P2.3 patch box).
+- [ ] RUN_OF_SHOW.md (morning-of table with Test-1 timings, the opening
+  script, tier checkpoints with what-to-say, troubleshooting table from the
+  restart-resilience pass)
+- [ ] README router rewrite
+- [ ] DEMO.md touch-ups (paths post-rename; opening choreography cross-ref)
+- [ ] Mark docs/PACKAGING_BRIEF.md superseded (header note)
 
 ### P3 — Acceptance tests (Patrick-run)
 

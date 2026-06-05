@@ -1,5 +1,9 @@
 # Demo Guide — The Race Engineer
 
+> Event timeline and the minute-by-minute opening script live in
+> `RUN_OF_SHOW.md`. This doc owns the demo MATERIAL — choreography, the
+> question bank, and the Formula E explainers.
+
 How to demonstrate this system, what to ask it, and why the answers are
 impressive. The README covers building and running; this covers *showing*.
 
@@ -36,10 +40,15 @@ while the race is on lap 8 and the engineer doesn't know yet.
 ```bash
 # Terminal 1 — from the repo root
 source activate.sh
+export AGENT_PACKAGE=solution.race_engineer   # demo the REFERENCE — the
+                                              # shell default is the starter
 export SIM_URL=$(gcloud run services describe fe-simulator \
     --region=$REGION --format='value(status.url)')
 uvicorn frontend.main:app --host 0.0.0.0 --port 8080
 # open Web Preview on 8080
+#
+# Or skip all of this: setup/7_deploy_cloud.sh gives a public Cloud Run
+# pit wall that ALWAYS runs the reference — no env vars needed.
 ```
 
 In the browser: click 🔇 MUTED to enable audio (browsers require the

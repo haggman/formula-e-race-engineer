@@ -1,3 +1,5 @@
+> **Note:** this simulator now lives here, inside the race-engineer monorepo, as a first-class service. It was formerly the standalone repo `haggman/formula-e-simulator`, which is archived.
+
 # Formula E Race Engineer Simulator
 
 Cloud Run service that replays Berlin 2024 R10 race telemetry at race pace, publishing a unified 1 Hz stream to Pub/Sub. Each team's GCP project gets its own simulator instance, feeding the agent they build in Challenge 2 of the Google Cloud + Formula E hackathon.
@@ -85,3 +87,4 @@ uvicorn src.main:app --reload --port 8080
 | REPLAY_SPEED_MULTIPLIER   | 1.0                                              | 1.0 = real-time                    |
 | AUTO_RESTART              | false                                            | Loop on chequered                  |
 | RACE_ID                   | berlin_2024_r10                                  | Echoed in every frame              |
+

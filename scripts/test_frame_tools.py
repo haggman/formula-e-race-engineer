@@ -1,5 +1,12 @@
 """Validate the agent's frame tools against Firestore.
 
+THE T1 CHECKPOINT VALIDATOR. Resolved through the AGENT_PACKAGE seam
+(shared/agent_pkg.py), so with activate.sh defaults this tests YOUR tools
+in starter/race_engineer/tools/frame_tools.py. Unimplemented tools show as
+NotImplementedError("TODO(T1): ...") — that's your checklist: when every
+section prints ✓, T1 is done. To validate the reference instead:
+    AGENT_PACKAGE=solution.race_engineer python scripts/test_frame_tools.py
+
 Two modes:
 
 SEED MODE (default) — run against the canonical static sample frame:
@@ -12,7 +19,7 @@ LIVE MODE — run against a live simulator replay:
   Same six tool exercises, but seed-specific asserts are replaced with
   live-appropriate checks: structural sanity, query mechanics, and
   data-quality invariants (e.g. lap_completed events must carry real
-  nonzero top speeds — validates the frames_v2 pipeline end to end).
+  nonzero top speeds — validates the frames pipeline end to end).
 """
 from __future__ import annotations
 
@@ -22,14 +29,16 @@ require_venv()
 import argparse
 import sys
 
-# We import via the agent package so the path mirrors how ADK will call.
-from solution.race_engineer.tools.frame_tools import (
-    get_current_state,
-    get_events_in_range,
-    get_field_am_status,
-    get_recent_events,
-)
+from shared.agent_pkg import AGENT_PACKAGE, agent_module
 from shared.models import EventType
+
+# Resolve the frame tools from the ACTIVE agent package — the same import
+# path ADK uses when the agent calls them.
+_ft = agent_module("tools.frame_tools")
+get_current_state = _ft.get_current_state
+get_recent_events = _ft.get_recent_events
+get_events_in_range = _ft.get_events_in_range
+get_field_am_status = _ft.get_field_am_status
 
 
 def header(label: str) -> None:
@@ -45,7 +54,7 @@ def main():
     args = parser.parse_args()
     live = args.live
     mode = "LIVE replay" if live else "SEED frame"
-    print(f"Mode: {mode}")
+    print(f"Mode: {mode}  |  Package: {AGENT_PACKAGE}")
 
     fails = 0
     race_now = None  # set by the first tool call, reused for live windows
@@ -105,11 +114,11 @@ def main():
                            if e.event_type == EventType.OVERTAKE
                            and e.data.get("position_change") == 0]
             assert not zero_change, \
-                f"{len(zero_change)} zero-change overtakes — frames_v2 filter not in effect?"
+                f"{len(zero_change)} zero-change overtakes — frames_v2+ filter not in effect?"
             laps = [e for e in resp.events if e.event_type == EventType.LAP_COMPLETED]
             bad_ts = [e for e in laps if not e.data.get("top_speed_kmh")]
             assert not bad_ts, \
-                f"{len(bad_ts)} lap_completed events with zero/None top speed — frames_v2 not flowing?"
+                f"{len(bad_ts)} lap_completed events with zero/None top speed — frames_v2+ not flowing?"
             if laps:
                 print(f"  ○ {len(laps)} lap_completed events, all with real top speeds "
                       f"(e.g. {laps[0].data.get('top_speed_kmh')} km/h)")
@@ -219,10 +228,10 @@ def main():
     # ------------------------------------------------------------------
     print("\n" + "=" * 60)
     if fails:
-        print(f"  ✗ {fails} test(s) failed ({mode})")
+        print(f"  ✗ {fails} test(s) failed ({mode}, {AGENT_PACKAGE})")
         sys.exit(1)
     else:
-        print(f"  ✓ All frame tools working against Firestore ({mode})")
+        print(f"  ✓ All frame tools working against Firestore ({mode}, {AGENT_PACKAGE})")
 
 
 if __name__ == "__main__":

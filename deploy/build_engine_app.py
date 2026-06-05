@@ -1,10 +1,11 @@
-"""Assemble the self-contained Agent Engine deployment folder (chunk 12).
+"""Assemble the self-contained Agent Engine deployment folder (chunk 12;
+P1.6 fix: agent_pkg excluded from staging, stale check matches imports only).
 
 Why this exists: `adk deploy agent_engine` stages ONLY the folder you point
 it at (source_packages = [that folder] — set unconditionally, no extra-
 packages mechanism in this CLI generation). Our agent imports two top-level
-repo packages (`solution.race_engineer.*`, `shared.*`) that would not exist on
-the engine. So we build `build/engine_app/`:
+repo packages (`solution.race_engineer.*`, `shared.*`) that would not exist
+on the engine. So we build `build/engine_app/`:
 
     engine_app/
       __init__.py
@@ -14,7 +15,13 @@ the engine. So we build `build/engine_app/`:
       race_engineer/      <- vendored copy of solution/race_engineer/, with
                              imports rewritten solution.race_engineer -> race_engineer
                              (renamed to avoid colliding with agent.py above)
-      shared/             <- vendored verbatim (no clash, no rewrite)
+      shared/             <- vendored verbatim (no clash, no rewrite),
+                             EXCEPT agent_pkg.py: the starter/solution seam
+                             is a CLIENT-side concept (frontend + dev
+                             scripts choose a package); the engine IS the
+                             solution agent and never imports it. Staging it
+                             would ship dead code whose docstring/env-default
+                             legitimately mention "solution.race_engineer".
       requirements.txt    <- engine runtime deps (CLI appends its own too)
       .env                <- engine env: Vertex mode, model location, TOOLBOX_URL
 
@@ -63,11 +70,20 @@ TOOLBOX_URL={TOOLBOX_URL}
 PROJECT_ID={PROJECT_ID}
 """
 
+# A REAL unrewritten import of the old package path — what the stale check
+# hunts for. Matches import statements only, not docstrings, comments, or
+# string literals (shared/agent_pkg.py's env default taught us why).
+STALE_IMPORT_RE = re.compile(
+    r"^\s*(?:from|import)\s+solution\.race_engineer\b", re.MULTILINE
+)
 
-def vendor(src: pathlib.Path, dst: pathlib.Path, rewrite: bool) -> int:
+
+def vendor(src: pathlib.Path, dst: pathlib.Path, rewrite: bool,
+           extra_ignore: tuple[str, ...] = ()) -> int:
     shutil.copytree(
         src, dst,
-        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env"),
+        ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".env",
+                                      *extra_ignore),
     )
     rewritten = 0
     if rewrite:
@@ -86,30 +102,36 @@ def main() -> None:
                  "so the engine knows where MCP Toolbox lives.")
     if not PROJECT_ID:
         sys.exit("PROJECT_ID is not set — run `source activate.sh` first.")
-        
+
     if BUILD.exists():
         shutil.rmtree(BUILD)
     BUILD.mkdir(parents=True)
 
-    n = vendor(REPO / "solution" / "race_engineer", BUILD / "race_engineer", rewrite=True)
-    vendor(REPO / "shared", BUILD / "shared", rewrite=False)
+    n = vendor(REPO / "solution" / "race_engineer", BUILD / "race_engineer",
+               rewrite=True)
+    vendor(REPO / "shared", BUILD / "shared", rewrite=False,
+           extra_ignore=("agent_pkg.py",))  # client-side seam; see module docstring
 
     (BUILD / "__init__.py").write_text("")
     (BUILD / "agent.py").write_text(AGENT_PY)
     (BUILD / "requirements.txt").write_text(REQUIREMENTS)
     (BUILD / ".env").write_text(ENV)
 
-    # Self-check: the staged tree must not reference the old package path,
-    # and must import cleanly with the staging dir on sys.path.
+    # Self-checks: no staged module may still IMPORT the old package path
+    # (docstrings and string literals are fine), the seam module must not
+    # have been staged, and the vendored tree must import cleanly.
     stale = [str(p) for p in BUILD.rglob("*.py")
-             if "solution.race_engineer" in p.read_text()]
+             if STALE_IMPORT_RE.search(p.read_text())]
     assert not stale, f"unrewritten imports remain: {stale}"
+    assert not (BUILD / "shared" / "agent_pkg.py").exists(), \
+        "agent_pkg.py staged — it must stay client-side"
     sys.path.insert(0, str(BUILD))
     import importlib
     mod = importlib.import_module("race_engineer.prompts")  # no GCP deps at import
     assert hasattr(mod, "build_event_reaction_prompt")
     print(f"Staged {BUILD}")
     print(f"  race_engineer/: {n} files had imports rewritten")
+    print(f"  shared/: vendored (agent_pkg.py excluded — client-side seam)")
     print(f"  TOOLBOX_URL baked into .env: {TOOLBOX_URL}")
     print("Import self-check passed (race_engineer.prompts loads from the staged tree).")
 
