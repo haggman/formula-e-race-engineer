@@ -450,7 +450,7 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 11 — STT push-to-talk (Chirp 2, spacebar PTT, visible transcript; enable_apis.sh)
 - [x] Chunk 12 — agent to Agent Engine (build_engine_app vendoring, deploy script + .engine_resource, engine_smoke green; project-number Firestore gotcha fixed)
 - [x] Chunk 13 — frontend to Cloud Run (agent_client seam + AGENT_MODE, sync-in-thread engine calls, Dockerfile/deploy script, speech.client IAM, empty-response drop; auth flip descoped + documented)
-- [ ] Write the Toolbox production note (tools.yaml header comment + DEMO.md aside): how to flip auth on, and why the lab leaves it open — text blocks already drafted, just needs pasting
+- [x] Write the Toolbox production note (tools.yaml header comment + DEMO.md aside): how to flip auth on, and why the lab leaves it open — text blocks already drafted, just needs pasting
 - [ ] README rewrite — UNBLOCKED (deploy story settled post-chunk-13). Likely absorbed into Phase 2's STUDENT_GUIDE/RUN_OF_SHOW split; decide there before writing anything.
 - [ ] Phase 2 packaging (separate planning conversation — see docs/PACKAGING_BRIEF.md)
 - [ ] Once Fork 2 wraps: fold `PROGRESS.md` findings into the main build doc Decision Log + Gotchas

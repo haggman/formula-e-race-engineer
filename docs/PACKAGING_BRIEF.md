@@ -6,6 +6,8 @@ plus the attached repo should be able to plan and execute packaging with no
 other context. The build's full history and findings live in `PROGRESS.md`;
 this brief covers only what packaging needs.
 
+All below decions should be considered possible options, but at this point nothing is set in concrete. 
+
 ---
 
 ## What exists (one paragraph)
@@ -13,8 +15,7 @@ this brief covers only what packaging needs.
 A complete, deployed reference solution: a live Formula E race (Berlin 2024
 R10) replays through a simulator → Pub/Sub → State Writer → Firestore,
 while the full race history sits in BigQuery behind an MCP Toolbox (14
-tools). An ADK agent — the race engineer for car 13 — runs on Vertex AI
-Agent Engine, reading both worlds. A FastAPI pit-wall frontend on Cloud Run
+tools). An ADK agent — the race engineer for car 13 — runs on Agent Platform Runtime, reading both worlds. A FastAPI pit-wall frontend on Cloud Run
 (public URL) renders live state, runs a deterministic significance scorer
 that decides when the engineer speaks, broadcasts spoken radio calls (Chirp
 3 HD TTS), and takes push-to-talk questions (Chirp 2 STT). The frontend
@@ -27,14 +28,11 @@ explainer.
 
 ## The event (constraints, confirmed 2026-06-05)
 
-- **Format:** 3 hours total — 20 min instructor opening (live demo of the
-  finished product + challenge framing; details live in docs, not slides),
-  ~2:30 building, 10 min wrap.
+- **Format:** 3 hours total — Current though on timing: 20 min instructor opening (live demo of the finished product + challenge framing; details live in docs, not slides), ~2:30 building, 10 min wrap.
 - **Projects:** PROVIDED Qwiklabs projects — one per student or one per
-  team, both must work. Students never use personal projects. Pre-seeding
-  via Qwiklabs automation may be possible; student-run setup must also work.
+  team, both options should be supported. Students never use personal projects. Provide student-run setup, where appropriate.
 - **Audience:** developers — solid Python, GCP knowledge decent but THIN on
-  the AI surfaces (ADK, Agent Engine, Gemini tooling). Cloud Shell
+  the AI surfaces (ADK, Agent Runtime, Gemini tooling). Cloud Shell
   instructions must be explicit (every step: where to run it, what to run).
 - **Standalone:** first event of the seven-challenge series; assume NOTHING
   carried over. All Formula E context (Attack Mode, the race story) must be
@@ -80,9 +78,7 @@ them as strong defaults, not settled law.
    the data quirks in PROGRESS.md "Findings" are discoverable treasure),
    persona person, trigger tuner. Parallel work, one integration point.
 
-4. **Starter = fill-in-the-blanks, not blank page.** A `starter/` package
-   mirroring `agent/`: plumbing given verbatim (`state_client`, config, the
-   time bridge — nobody derives `RACE_START_EPOCH_NS` under time pressure),
+4. **Starter = fill-in-the-blanks, not blank page.** A `starter/` package,
    ONE frame tool complete as the worked example, the rest as specced
    TODOs, persona prompt as a skeleton stating the rules to write. Given
    the audience (Python-strong, ADK-weak), TODOs should teach ADK mechanics
