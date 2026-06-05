@@ -36,6 +36,56 @@ docs/PACKAGING_BRIEF.md. RUN_OF_SHOW carries [___] timing cells and three
 run: time every setup step, perform the opening out loud, restart-resilience
 pass), then Test 2 (the student run, tier budgets, peek log).**
 
+**Verify finding #3 (pre-demo check-in, 2026-06-05):** on the long-lived
+stack, verify reported "RaceState stale with the sim running — check
+fe-state-writer logs," sending Patrick toward the writer. Actual cause: the
+race had FINISHED (LOOP off) ~67 min earlier — a 2918s race plus silence
+matches the 4053s staleness; the sim publishes nothing at the chequered
+flag, so staleness is expected and the pipeline was fine. Fix
+(p2_verify_race_done_fix.tar.gz → setup/verify_checks.py): the sim check
+now derives race_done from /status seconds_remaining, and the stale branch
+has THREE diagnoses — paused (note), race finished (✗ with "RESTART and
+re-verify" + the LOOP tip), and genuinely mid-race-stale (✗ blaming the
+writer/subscription, now correctly reserved for real breakage). Same theme
+as findings 1-2: make the check smarter, not looser.
+
+**Finding #4 (pre-demo check-in): persistent Q&A session latency compounds
+on the deployed frontend.** The persistent session is a documented locked
+decision (PROGRESS.md Decisions + chunks 9/13) — follow-ups keep context —
+but its corollary wasn't: fe-frontend runs min=max=1 with no scale-to-zero,
+so ONE engine-side session accumulates every question ever asked through
+that instance, and each new question replays the whole history (observed:
+20-40s answers vs the ~10-15s fresh-session band). Local dev never sees it
+(uvicorn restarts reset the session). Mitigation: RUN_OF_SHOW pre-flight now
+bounces fe-frontend before any demo.
+**Escalation (same evening):** not just latency — OUTRIGHT Q&A failure on
+the deployed pit wall ("who's in car 48", the Cassidy energy question)
+while agent_chat answered both and proactive triggers kept landing. The
+discriminator: triggers use fresh engine sessions, Q&A uses the ONE cached
+persistent session — and EngineAgentClient cached its ID forever
+(`if self._qa_session_id is None`), so an expired/degraded engine-side
+session means permanent Q&A death on a long-lived instance. **Diagnosis corrected (same night):** the bounce did NOT fix it,
+and the frontend logs settled it — `call dropped (lap_summary)` and
+`(must_say)` failures interleaved with the qa failures, all either
+TimeoutError or "engine returned no text (1-2 tool calls)". Triggers use
+FRESH sessions, so the persistent-session theory was falsified; this is
+the chunk-13 quota signature — engine runs dying at the final generation
+on the shared regional Gemini pool (gRPC code 8 / silent empty stream),
+with TimeoutErrors as the slow-retry-chain flavor of the same thing.
+NOT caused by the all.sh rebuild (data plane fully verified green the
+same evening) and NOT fixable by frontend redeploy or a fresh project
+(the pool is regional and shared). Chunk-13 precedent: evening
+contention, recovered by morning. Mitigations: env-only timeout raises
+(ASK_TIMEOUT_S/FIRE_TIMEOUT_S — no rebuild needed), low trigger density
+(1×, PAUSE for Q&A), morning retest, local pit wall as demo Plan B
+(agent_chat answered everything all evening — the local path retries
+without a wall-clock ceiling). The session self-heal patch
+(p3_qa_session_selfheal.tar.gz) stays in the repo as hygiene for the
+real expired-session failure mode, but it is NOT the fix for this; ships
+with Test 1's deploy. NEW SESSION button / session-age cap deferred. Operational corollary,
+now in RUN_OF_SHOW spirit: pre-flight ends RESTART-then-PAUSE, and LOOP on
+keeps a long-lived demo stack always verifiable.
+
 ---
 
 ## Decisions locked (2026-06-05 planning session)
@@ -305,6 +355,123 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   during P1.4, sanity-check during Test 2.
 - Whether verify.sh should also assert the agent answers one question (a
   mini engine-smoke for local mode) — decide in P1.5.
+- PARKED (for the STUDENT_GUIDE rewrite): **Formula E primer upgrade.**
+  Assume the audience knows "electric race cars" and nothing else. The
+  existing "Two minutes of Formula E" section is the seed — expand it into
+  a proper primer: what an ACTIVATION ZONE physically is (painted loop OFF
+  the racing line; driving through it costs track position — that's the
+  strategic tax), arming vs activation as intent vs deployment, the three
+  scenarios and why a driver re-arms (DAC armed 9x this race), the
+  magenta halo (everyone SEES who's boosted), why AM exists at all
+  (fixed-duration power committed against an unknown future = the whole
+  reason an AI engineer is plausible), energy normalization (every car
+  finishes at 100% — only mid-race deltas mean anything), no pit stops /
+  one car (Gen3 context), and the Berlin R10 story arc (DAC P10->win, the
+  lap-3 cluster, the Cassidy battle, the lap 7-9 attack-loop sacrifice).
+  Format options: glossary box + a "the race you're watching" story
+  paragraph; consider a primer slide for the opening (or a Nano Banana
+  track diagram showing the attack loop off-line). Tone: a fan explaining
+  to a friend, not a rulebook. Cross-check every claim against DEMO.md's
+  question-bank facts so the primer and the agent never disagree.
+- PARKED (for the STUDENT_GUIDE rewrite): **Gemini Code Assist + ADK docs
+  links.** (a) Students work in Cloud Shell Editor, which has Gemini Code
+  Assist built in — tell them to USE it (a line in Getting Started + an
+  opening talking point; it pairs naturally with the answer-key-open
+  policy). (b) We assume Python but NOT ADK — the guide needs a short
+  curated "learn ADK fast" links block: function tools, ToolboxToolset,
+  Agent constructor, runners. CRITICAL VERSION CAVEAT: the lab is built on
+  ADK 1.x and ADK 2.0 is out (breaking changes: graph Workflow Runtime,
+  callbacks, exception handling) — every link must be version-pinned or
+  verified to apply to 1.x, and the guide should say explicitly "we use
+  ADK 1.x; if a doc page mentions Workflow Runtime/graphs, you're reading
+  2.0 — back out." Also warn that Code Assist may suggest 2.0-style APIs;
+  the worked example in frame_tools.py is the ground truth pattern.
+- PARKED: **message-type taxonomy + expected-volume baselines.** Be crisp
+  about the four call types and their gates so a glance at a running pit
+  wall says healthy-or-not: EVENT REACTION (scorer >= threshold, subject
+  to debounce + cooldown), LAP SUMMARY (floor: every 2 laps —
+  summary_every=2), MUST-SAY (severity overrides debounce, has its own
+  min-gap), Q&A (human-initiated, persistent session). Plus the two
+  silent categories: SUPPRESSED (below threshold/debounced — visible in
+  local_test --verbose) and DROPPED (budget ceiling / timeout —
+  drop-with-cooldown by design). Observed baseline to validate (Patrick,
+  5x, 26 laps, local): summaries every 2-3 laps (floor is 2; the 3s are
+  drops), 3 must-says, but only ONE event reaction — plausibly correct at
+  5x (event density x5 vs fixed agent throughput => coalescing + drops)
+  but low enough to check; ties into the latency investigation (slow LLM
+  calls starve the loop). Action: add fired/suppressed/dropped counters
+  per type to the loop log, record baselines at 1x/2x/5x during Test 1,
+  publish the table in RUN_OF_SHOW ("what healthy looks like") +
+  STUDENT_GUIDE.
+- PARKED (for the STUDENT_GUIDE rewrite in the cascade): **team lane map —
+  independent test surfaces.** Make explicit that each lane validates
+  WITHOUT the other lanes being done: a "lane map" table (lane -> file ->
+  test script -> what it needs). TOOLS lane: scripts/test_frame_tools.py
+  needs only frame_tools.py + the data plane (use seed_test_state.py for a
+  deterministic frozen frame instead of chasing the live replay). AGENT
+  lane: agent_chat runs even with T1 unfinished — unimplemented tools
+  raise cleanly, so history-only questions validate the Toolbox wiring
+  before the tools lane lands. PERSONA lane: agent_chat + the given
+  get_current_state is enough to start immediately. TRIGGERS lane:
+  scripts/local_test.py drives the loop against the starter as shipped.
+  toolbox_test.py validates the deployed toolbox with no agent at all.
+  Note WHY merging is painless: lanes touch different files, so
+  integration is copy-level; suggest the integration ritual (after lanes
+  merge: test_frame_tools all-green + one fused question in agent_chat).
+  Surfaces in: STUDENT_GUIDE team section, RUN_OF_SHOW opening talking
+  point ("four lanes, four test scripts, nobody waits on anybody").
+- PARKED (post-demo): **troubleshoot LOCAL Q&A latency.** Even in local
+  mode (InMemoryRunner, agent_chat / local pit wall) the engineer sometimes
+  takes very long to answer. Hypotheses to test, in rough likelihood order:
+  (1) retry backoff absorbing 429s — shared_config retries up to 10 attempts,
+  exp backoff capped 8s + jitter, so a contended quota window can silently
+  add 30-60s per LLM call while looking like "thinking" (logs say gRPC code
+  8, never "429"); (2) long tool chains on fused questions —
+  MAX_LLM_CALLS_PER_QA=12 permits deep research loops, and each tool call =
+  a full LLM round trip + (for Toolbox tools) a network hop to fe-toolbox;
+  (3) the model wandering into schema discovery / execute_sql_bq when a
+  curated tool would have answered. Diagnostic plan: add per-step timing to
+  agent_chat (timestamp each tool call + each LLM gap), turn on genai client
+  retry logging to make backoff visible, and time one known-fast question
+  (pure get_current_state) vs one fused question in the same minute —
+  separates quota weather from chain depth. Possible outcomes: an
+  ASK-side progress indicator ("engineer is checking history...") in the
+  UI, a tighter QA call ceiling, or prompt guidance steering to curated
+  tools first. Fold findings into RUN_OF_SHOW troubleshooting.
+- PARKED (post-demo, with the T2/T4 cascade): **BONUS.md bonus board** for
+  fast finishers — additive-only, never carve features out of the given
+  product (SIM bar is load-bearing for troubleshooting + demo). Structure:
+  three areas, two tickets each, format = surface + spec + demo payoff, no
+  solutions. UI: [S] Chirp HD voice picker (re-voice the engineer live);
+  [M] live tool-call observability panel (ADK eventing lesson, makes the
+  clock bridge visible). AGENT: [M] post-race DEBRIEF button at the
+  chequered flag — agent writes the race story from history tools; [L]
+  re-cast the agent for another car (OUR_CAR_NUMBER + persona — Cassidy's
+  losing side of the same race; best wrap-demo payoff). VOICE & DATA: [S]
+  Portuguese radio (Antonio's language — TTS locale + prompt rule); [M]
+  mini eval harness (5 canned questions; assert no invented names, clean
+  weather refusal). DEPLOY: [L]
+  ship YOUR agent to Agent Engine + a public Cloud Run pit wall — the
+  setup/7_deploy_cloud.sh path, promoted from instructor-only to a bonus
+  ticket; mostly wait time (engine create 5-10 min silent), which suits a
+  finished-early team, and it ends with a shareable public URL running
+  THEIR persona. PREREQ CODE CHANGE: deploy/build_engine_app.py hardcodes
+  the solution package (REPO/"solution"/race_engineer + its rewrite regex)
+  — it must respect AGENT_PACKAGE or students would deploy the reference,
+  not their build; same for deploy_frontend's baked env. Alternates if any
+  ticket dies: AM countdown timers on the tower, radio transcript log w/
+  replay. The new-curated-Toolbox-tool idea stays in T4's menu, NOT on the
+  board (no double-listing).
+  **Requires one GIVEN-product addition (ours, not a student ticket):
+  FINISH RACE** — SIM-bar button + simulator /seek endpoint jumping the
+  cursor to ~10s before the final frame, then playing out naturally so the
+  chequered state lands. Key insight: BQ already holds the whole race and
+  access is gated only by race_wall_time_ns, so finishing = moving the
+  clock; no event flood, no State Writer load. Firestore's event log gets
+  a gap for skipped laps — fine, the debrief is a history-tools job.
+  Side benefit: instructor rehearsals + Test 1 get a fast path to
+  end-of-race states (cf. the verify race-done finding). Test 2 does not
+  budget-validate board tickets; sanity-poke one or two.
 - T4 arming-rule exercise: spec it in STUDENT_GUIDE or leave as an open
   prompt? Decide in P2.
 

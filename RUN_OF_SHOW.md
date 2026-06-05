@@ -46,6 +46,10 @@ runs far past its number, it's stalled, not slow):
 - [ ] SIM bar: speed 2×, LOOP off, then RESTART and confirm calls flow.
 - [ ] PAUSE the sim. Leave it paused on the grid until showtime.
 - [ ] `python scripts/engine_smoke.py` → both worlds answer.
+- [ ] Bounce fe-frontend for a FRESH Q&A session (the persistent session
+      accumulates every question ever asked through this instance, and
+      latency grows with it):
+      `gcloud run services update fe-frontend --region=$REGION --update-env-vars=SESSION_RESET=$(date +%s)`
 - [ ] Have STUDENT_GUIDE.md's "Getting started" block on a slide or
       whiteboard: clone URL, `source activate.sh`, `bash setup/all.sh`.
 

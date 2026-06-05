@@ -57,12 +57,15 @@ def main() -> int:
     print("== 1/5 Simulator ==")
     sim_url = os.environ.get("SIM_URL", "").rstrip("/")
     paused = False
+    race_done = False
     if not sim_url:
         bad("SIM_URL not set — is fe-simulator deployed? (setup/6_deploy_simulator.sh)")
     else:
         try:
             st = get_json(f"{sim_url}/status")
             paused = bool(st.get("paused"))
+            sr = st.get("seconds_remaining")
+            race_done = sr is not None and float(sr) <= 1.0
             ok(f"sim reachable — t={st.get('race_time_s')}s, "
                f"frames_loaded={st.get('frames_loaded')}, paused={paused}, "
                f"publish_count={st.get('publish_count')}")
@@ -91,8 +94,14 @@ def main() -> int:
             elif paused:
                 note(f"RaceState {age}s old, but the sim is PAUSED — "
                      "resume or RESTART it and re-verify if unsure")
+            elif race_done:
+                bad(f"RaceState stale ({age}s old) because the race FINISHED "
+                    "(sim at the chequered flag, LOOP off) — staleness is "
+                    "expected, but end-to-end is unproven: RESTART the sim "
+                    "(SIM bar, or POST $SIM_URL/restart) and re-run verify. "
+                    "Tip: LOOP on keeps a long-lived stack always verifiable.")
             else:
-                bad(f"RaceState stale ({age}s old) with the sim running — "
+                bad(f"RaceState stale ({age}s old) with the sim mid-race — "
                     "check fe-state-writer logs and the Pub/Sub push subscription")
     except Exception as e:
         bad(f"Firestore check failed: {e}")
