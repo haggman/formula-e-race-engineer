@@ -25,6 +25,12 @@
   header .phase { color: var(--accent); text-transform: uppercase; font-size: 12px; }
   header .clock { margin-left: auto; color: var(--dim); }
   header .conn { font-size: 11px; }
+  #audio-toggle {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    font: inherit; font-size: 11px; padding: 3px 10px; border-radius: 4px; cursor: pointer;
+  }
+  #audio-toggle.muted { color: var(--dim); }
+  #audio-toggle.live { border-color: var(--ok); color: var(--ok); }
   header .conn.ok { color: var(--ok); } header .conn.down { color: var(--bad); }
 
   main { flex: 1; display: grid; grid-template-columns: 300px 1fr; min-height: 0; }
@@ -96,6 +102,12 @@
     background: var(--accent); border: 0; color: #000; font: inherit;
     padding: 8px 18px; border-radius: 6px; cursor: pointer;
   }
+  #mic {
+    background: var(--panel); border: 1px solid var(--line); color: var(--text);
+    user-select: none;
+  }
+  #mic.rec { background: var(--bad); border-color: var(--bad); color: #fff; }
+  #mic.busy { opacity: 0.5; }
 
   /* Pit-wall systems bar */
   #simbar {
@@ -118,6 +130,7 @@
   <h1>RACE ENGINEER — CAR 13 · DA COSTA</h1>
   <span class="phase" id="phase">—</span>
   <span class="clock" id="clock">t=—</span>
+  <button id="audio-toggle" class="muted">🔇 MUTED</button>
   <span class="conn down" id="conn">● connecting</span>
 </header>
 <main>
@@ -159,7 +172,8 @@
     </div>
     <div id="radiolog"><div id="placeholder">Radio silence — waiting for the engineer…</div><div id="pending">engineer is checking…</div></div>
     <div id="askbar">
-      <input id="question" placeholder="Ask your engineer…">
+      <input id="question" placeholder="Ask your engineer… (or hold SPACE to talk)">
+      <button id="mic" title="Hold to talk (or hold Space outside the text box)">🎤</button>
       <button id="ask">ASK</button>
     </div>
     <div id="simbar">
@@ -225,10 +239,12 @@ function renderState(msg) {
     if (lapStartT !== null) lapDuration = msg.race_time_s - lapStartT;
     lapStartT = msg.race_time_s;
     posAtLapStart = o.position;
-  } else if (lapSeen === null) {
+  } else if (lapSeen === null && o.lap >= 1 && msg.race_time_s >= 0) {
+    // start tracking at the green flag, not during the pre-race countdown —
+    // calibrating from t≈-10s made lap 1 fill early and sit
     lapSeen = o.lap; lapStartT = msg.race_time_s; posAtLapStart = o.position;
   }
-  lapSeen = o.lap;
+  if (lapSeen !== null) lapSeen = o.lap;
 
   // position + delta vs lap start
   $("s-pos").textContent = "P" + o.position;
@@ -275,7 +291,30 @@ function renderState(msg) {
   $("amstat").classList.toggle("amon", o.am_active);
 }
 
+// --- radio audio: sequential playback queue (one mouth, one speaker) ---
+let audioEnabled = false;
+const audioQueue = [];
+let audioPlaying = false;
+
+function drainAudio() {
+  if (audioPlaying || !audioEnabled || audioQueue.length === 0) return;
+  audioPlaying = true;
+  const el = new Audio("data:audio/mp3;base64," + audioQueue.shift());
+  el.onended = el.onerror = () => { audioPlaying = false; drainAudio(); };
+  el.play().catch(() => { audioPlaying = false; });
+}
+
+$("audio-toggle").onclick = () => {
+  audioEnabled = !audioEnabled;
+  const b = $("audio-toggle");
+  b.className = audioEnabled ? "live" : "muted";
+  b.textContent = audioEnabled ? "🔊 LIVE AUDIO" : "🔇 MUTED";
+  if (!audioEnabled) audioQueue.length = 0;  // muting clears the backlog
+  // the click itself is the user gesture that unlocks browser autoplay
+};
+
 function addRadioCall(msg) {
+  if (msg.audio && audioEnabled) { audioQueue.push(msg.audio); drainAudio(); }
   const ph = $("placeholder"); if (ph) ph.remove();
   const pending = $("pending");
   if (msg.kind === "qa") pending.style.display = "none";
@@ -345,6 +384,73 @@ $("sim-pause").onclick = async () => {
 $("sim-speed").onchange = e => simCall("speed", { multiplier: Number(e.target.value) });
 $("sim-loop").onchange = e => simCall("auto-restart", { enabled: e.target.checked });
 initSimBar();
+
+// --- push-to-talk: hold the mic button, or hold Space outside the input ---
+let micStream = null, recorder = null, recChunks = [], recording = false;
+
+async function pttStart() {
+  if (recording) return;
+  try {
+    micStream = micStream || await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    $("mic").textContent = "🚫"; $("mic").title = "Microphone blocked by the browser";
+    return;
+  }
+  recording = true;
+  recChunks = [];
+  recorder = new MediaRecorder(micStream);
+  recorder.ondataavailable = e => { if (e.data.size) recChunks.push(e.data); };
+  recorder.onstop = sendRecording;
+  recorder.start();
+  $("mic").classList.add("rec");
+  $("mic").textContent = "● REC";
+}
+
+function pttStop() {
+  if (!recording) return;
+  recording = false;
+  recorder.stop();
+  $("mic").classList.remove("rec");
+  $("mic").textContent = "🎤";
+}
+
+async function sendRecording() {
+  const blob = new Blob(recChunks, { type: recorder.mimeType });
+  if (blob.size < 1000) return;  // a tap, not speech
+  const mic = $("mic");
+  mic.classList.add("busy"); mic.textContent = "…";
+  try {
+    const r = await fetch("/api/stt", { method: "POST", body: blob });
+    if (!r.ok) throw new Error();
+    const { transcript } = await r.json();
+    if (transcript) {
+      $("question").value = transcript;        // let the audience see what was heard
+      setTimeout(sendQuestion, 600);           // then it goes to the engineer
+    }
+  } catch {
+    $("question").placeholder = "Didn't catch that — try again or type";
+  } finally {
+    mic.classList.remove("busy"); mic.textContent = "🎤";
+  }
+}
+
+$("mic").addEventListener("mousedown", pttStart);
+$("mic").addEventListener("touchstart", e => { e.preventDefault(); pttStart(); });
+for (const ev of ["mouseup", "mouseleave", "touchend"])
+  $("mic").addEventListener(ev, pttStop);
+
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" && !e.repeat && document.activeElement !== $("question")) {
+    e.preventDefault();  // don't scroll the page
+    pttStart();
+  }
+});
+document.addEventListener("keyup", e => {
+  if (e.code === "Space" && document.activeElement !== $("question")) {
+    e.preventDefault();
+    pttStop();
+  }
+});
 
 let ws, retry = 1000;
 function connect() {

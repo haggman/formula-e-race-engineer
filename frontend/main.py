@@ -17,12 +17,14 @@ import os
 from pathlib import Path
 
 import httpx
-from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 from agent.race_engineer.config import OUR_CAR_NUMBER
 from agent.race_engineer.tools.state_client import get_state_client
 from frontend.engineer_loop import EngineerLoop
+from frontend.stt import transcribe
+from frontend.tts import synthesize
 from shared.models import RaceState
 
 logger = logging.getLogger("frontend")
@@ -67,6 +69,17 @@ class ConnectionManager:
 manager = ConnectionManager()
 engineer: EngineerLoop | None = None        # set in lifespan
 latest = {"race_time_s": 0, "lap": None}    # for stamping Q&A log entries
+
+
+async def radio_broadcast(message: dict) -> None:
+    """Broadcast wrapper that gives the engineer a voice: synthesizes audio
+    for every spoken radio kind before fan-out. Questions stay silent; a
+    synthesis failure degrades to text-only."""
+    if message.get("type") == "radio" and message.get("kind") != "question":
+        audio = await synthesize(message.get("text", ""))
+        if audio:
+            message["audio"] = audio
+    await manager.broadcast(message)
 
 
 # ============================================================================
@@ -135,7 +148,7 @@ async def state_poller() -> None:
 async def lifespan(app: FastAPI):
     global engineer
     poller = asyncio.create_task(state_poller())
-    engineer = EngineerLoop(manager.broadcast)
+    engineer = EngineerLoop(radio_broadcast)
     engineer_task = asyncio.create_task(engineer.run())
     yield
     for task in (poller, engineer_task):
@@ -157,13 +170,13 @@ async def _handle_ask(question: str) -> None:
     stamp = {"race_time_s": latest["race_time_s"], "lap": latest["lap"]}
     try:
         answer = await engineer.ask(question)
-        await manager.broadcast({"type": "radio", "kind": "qa",
-                                 "text": answer, **stamp})
+        await radio_broadcast({"type": "radio", "kind": "qa",
+                               "text": answer, **stamp})
     except Exception as e:
         logger.warning("qa failed: %s", str(e).splitlines()[0][:160])
-        await manager.broadcast({"type": "radio", "kind": "qa",
-                                 "text": "Radio failure on that one — ask again.",
-                                 "error": True, **stamp})
+        await radio_broadcast({"type": "radio", "kind": "qa",
+                               "text": "Radio failure on that one — ask again.",
+                               "error": True, **stamp})
 
 
 @app.websocket("/ws")
@@ -220,3 +233,23 @@ async def sim_control(action: str, payload: dict | None = Body(default=None)) ->
         r = await client.post(f"{SIM_URL}{_SIM_ACTIONS[action]}", json=payload, timeout=15)
         r.raise_for_status()
         return r.json()
+
+
+# ============================================================================
+# Push-to-talk transcription
+# ============================================================================
+
+
+@app.post("/api/stt")
+async def stt(request: Request) -> dict:
+    """Body: raw audio bytes from MediaRecorder (webm/opus or whatever the
+    browser produced — Speech V2 auto-detects). Returns the transcript."""
+    audio = await request.body()
+    if not audio:
+        raise HTTPException(400, "empty audio")
+    try:
+        transcript = await transcribe(audio)
+    except Exception as e:
+        logger.warning("stt failed: %s", str(e).splitlines()[0][:160])
+        raise HTTPException(502, "transcription failed")
+    return {"transcript": transcript}

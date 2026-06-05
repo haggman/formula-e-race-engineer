@@ -2,13 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 9 complete — frontend live: websocket UI, engineer loop in-service, Q&A, sim controls)
+**Last updated:** 2026-06-04 (chunk 11 complete — push-to-talk STT, the Chirp-to-Chirp loop closed; consolidated API enablement; lap-1 ring root fix)
 
 ---
 
 ## Where we are
 
-Chunks 1–9 complete. The demo surface is live: a pit-wall web UI (position tower with AM badges, energy needle gauge with regen indicator, lap-progress ring, position delta) fed over a websocket by a FastAPI service that runs the chunk 8 trigger policy as a background task and answers pit-wall Q&A in a persistent session — proactive calls and researched answers interleaving in one radio log, with simulator controls (restart/pause/speed/loop) proxied into the page. Next: chunk 10, TTS — the engineer gets a voice.
+Chunks 1–11 complete. The voice loop is closed in both directions: hold the mic button (or spacebar outside the text box) and talk to the engineer — Chirp 2 transcribes, the transcript lands visibly in the input and auto-sends, Gemini reasons, Chirp 3 HD answers aloud. The whole speech round-trip is Google Cloud, which is the demo line. Verified flawless by ear in both directions. Next: chunk 12, deploying the agent to Vertex AI Agent Engine.
 
 ---
 
@@ -201,11 +201,32 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 - New deps: fastapi, uvicorn[standard], httpx (requirements.txt, floors).
 - Known cosmetic, deferred to the next UI pass: lap-1 ring calibrates from the pre-race countdown (t≈−10s), so it fills ~10s early and sits full until lap 2.
 
+### Chunk 10 — TTS ✅ (the engineer speaks)
+
+- `frontend/tts.py` — async Cloud TTS client, Chirp 3 HD `en-GB-Chirp3-HD-Charon` at 1.15× (both env-overridable: TTS_VOICE / TTS_RATE). Failure policy: a lost voice is not a lost call — synthesis errors log and the message goes out text-only.
+- Architecture: `radio_broadcast` wrapper in main.py synthesizes before fan-out — `engineer_loop.py` needed ZERO changes (it already took a broadcast callback). One synthesis per call regardless of connected browsers; audio travels base64-in-message (~6s calls ≈ 100-200KB), atomically with its text. Questions (kind=question) stay silent; Q&A answers speak.
+- Browser: 🔇/🔊 header toggle (the click is the autoplay-unlock gesture); sequential playback queue — overlapping calls wait their turn; muting clears the backlog.
+- Normalization design fix: the chunk-6 "write words as SAID" rule produced inconsistent spelled-out numbers ("seventy-three point three"). Rule rewritten: ALL numbers as digits ("92.8 percent", "224 km/h", "P3") — the synthesizer reads digits perfectly, and the text log stays consistent. Sanctioned idiom exception: "two tenths" — real engineers say it; the digits rule governs readouts, not voice.
+- Ear-test verdict: voice and rate land; Chirp prosody is natural but emotionally flat — acceptable, arguably on-brand for an engineer.
+- `DEMO.md` (repo root) — the demo guide: two-worlds framing (Firestore now / BigQuery then), the five scripted moments of laps 1-11, a question bank organized by what each question proves (including the honesty test), pause-mid-cluster choreography, student teaching points, troubleshooting table.
+- New dep: google-cloud-texttospeech (requirements, floor); `texttospeech.googleapis.com` enabled.
+
+### Chunk 11 — STT push-to-talk ✅ (Chirp in, Gemini in the middle, Chirp out)
+
+- `frontend/stt.py` — Cloud Speech V2, **Chirp 2** model (same family as the voice — deliberate symmetry), regional us-central1 endpoint, default `_` recognizer, project via google.auth.default(). MediaRecorder's webm/opus decodes via AutoDetectDecodingConfig — the browser sends its native container untouched. Env-overridable: STT_REGION / STT_MODEL / STT_LANGUAGE.
+- `POST /api/stt` in main.py: raw audio bytes in, transcript out; failures 502 and the UI degrades politely ("Didn't catch that — try again or type").
+- Push-to-talk UX: hold the 🎤 button (mouse/touch) OR hold **Space when focus is outside the question input** — in the input, space types spaces; the two modes never fight. ● REC while held; sub-second taps discarded; transcript lands VISIBLY in the input for 600ms before auto-sending (the audience sees what was heard — and you catch a mangled driver name before the agent does). Typed path untouched.
+- Mic permission denial degrades to 🚫 with tooltip; Web Preview is HTTPS so getUserMedia works.
+- **Lap-1 ring root cause fixed** (the deferred chunk 9 TODO): client lap tracking now refuses to initialize until lap ≥ 1 AND race time ≥ 0 — it calibrates from the green flag, not the pre-race countdown that made lap 1 fill ~10s early and sit.
+- **API enablement consolidated**: `deploy/enable_apis.sh` — one idempotent step-zero script with the full inventory (run, pubsub, firestore, bigquery, aiplatform, texttospeech, speech, cloudbuild, artifactregistry — the last two pre-staged for chunk 13's containerization). Per-script enables left in place deliberately: each deploy script stays self-sufficient.
+- DEMO.md grew an "Attack Mode in sixty seconds" teaching section (exactly two activations, fixed durations with no early exit, the SC clock trap, the activation-zone position sacrifice) plus a scenario question in the bank.
+- New dep: google-cloud-speech (requirements, floor); `speech.googleapis.com` enabled.
+
 ---
 
 ## In progress
 
-**Chunk 10 — TTS.** The engineer's calls get spoken: Chirp 3 HD voice (en-GB male, 1.15× rate per the locked decision), wired into the frontend's radio broadcast path so each `{type:"radio"}` message carries or fetches audio. The persona's TTS normalization rules (numbers, units, no markdown) have been in the prompt since chunk 6 waiting for this.
+**Chunk 12 — Agent Engine deploy.** The agent leaves the laptop: `adk deploy agent_engine` with `shared/` bundled via `--extra-packages`, env plumbed (TOOLBOX_URL, project, region). The frontend gains an env switch between local InMemoryRunner and the deployed engine — local stays the dev path.
 
 ---
 
@@ -213,8 +234,6 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 10 | TTS wired in | Chirp 3 British male, 1.15× rate, browser playback |
-| 11 | STT + push-to-talk | MediaRecorder + Cloud STT v2 |
 | 12 | Agent → Agent Engine | `adk deploy agent_engine` (with shared/ bundled), frontend talks to remote agent |
 | 13 | Frontend → Cloud Run, auth flip | Toolbox to authenticated, service account invoker bindings, State Writer auth tightened, full demo URL |
 | 14 | Demo dry run | Laps 1–10 at 1.0× speed; capture what the agent says |
@@ -360,9 +379,9 @@ These didn't make the build doc but matter for downstream work:
 - [x] Chunk 7 — significance scorer + local harness (pure scorer in shared/, snapshot-passing trigger loop, laps 1-10 validated)
 - [x] Chunk 8 — reasoning iteration (per-type debounce + must-say hold, 3-layer tool budget, filler scrub, fact-check passed)
 - [x] Chunk 9 — frontend (websocket UI, engineer loop in-service, Q&A, sim controls)
-- [ ] Lap-1 ring calibration vs pre-race countdown (UI nitpick — fix in the next UI pass)
-- [ ] Chunk 10 — TTS
-- [ ] Chunk 11 — STT + push-to-talk
+- [x] Lap-1 ring calibration — root fixed in chunk 11 (tracking starts at the green flag)
+- [x] Chunk 10 — TTS (Chirp 3 HD via radio_broadcast wrapper; digits normalization; DEMO.md)
+- [x] Chunk 11 — STT push-to-talk (Chirp 2, spacebar PTT, visible transcript; enable_apis.sh)
 - [ ] Chunk 12 — agent to Agent Engine
 - [ ] Chunk 13 — frontend to Cloud Run, auth flip
 - [ ] Chunk 14 — demo dry run
