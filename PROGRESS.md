@@ -2,13 +2,18 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 11 complete — push-to-talk STT, the Chirp-to-Chirp loop closed; consolidated API enablement; lap-1 ring root fix)
+**Last updated:** 2026-06-04 (chunk 12 complete — agent live on Agent Engine; project-number Firestore gotcha found and fixed; remote smoke test green on both data worlds)
 
 ---
 
 ## Where we are
 
-Chunks 1–11 complete. The voice loop is closed in both directions: hold the mic button (or spacebar outside the text box) and talk to the engineer — Chirp 2 transcribes, the transcript lands visibly in the input and auto-sends, Gemini reasons, Chirp 3 HD answers aloud. The whole speech round-trip is Google Cloud, which is the demo line. Verified flawless by ear in both directions. Next: chunk 12, deploying the agent to Vertex AI Agent Engine.
+Chunks 1–12 complete. The agent has left the laptop: it runs on Vertex AI
+Agent Engine, reaching BigQuery through the deployed Toolbox and Firestore
+through its service agent. `scripts/engine_smoke.py` exercises both paths
+remotely and both answer in character. Next: chunk 13 — frontend to Cloud
+Run with the auth flip (Toolbox locked down, frontend pointed at the
+deployed engine via env switch).
 
 ---
 
@@ -19,9 +24,10 @@ Chunks 1–11 complete. The voice loop is closed in both directions: hold the mi
 | **Driver** | Car #13 — António Félix da Costa (R10 winner, P10→P3 by lap 5 charge, 9 scenario armings) |
 | **Architecture** | Three services + Firestore. **State Writer** (Pub/Sub push → Firestore) handles ingestion; **Agent** (Agent Engine) handles reasoning; **Frontend** (Cloud Run) handles UX, significance scoring, agent invocation. Firestore is the integration point — single source of truth for current race state and events. All three services stateless. |
 | **Service topology** | (1) Simulator on Cloud Run → fe-telemetry Pub/Sub. (2) State Writer on Cloud Run subscribes to topic, writes RaceState + Event docs to Firestore. (3) Agent on Agent Engine reads Firestore via frame tools + BigQuery via MCP Toolbox. (4) Frontend on Cloud Run reads Firestore for live UI, runs significance scorer, invokes Agent. |
-| **Shared models** | `shared/` package at repo root holds canonical Pydantic models for RaceState, CarState, Event. Both State Writer and Agent import from it. Single source of truth for the Firestore contract. ADK deploy bundles `shared/` via `--extra-packages` (or symlink at deploy time — TBD chunk 6). |
+| **Shared models** | `shared/` package at repo root holds canonical Pydantic models for RaceState, CarState, Event. Both State Writer and Agent import from it. Single source of truth for the Firestore contract. Engine deploy vendors `shared/` into the staged app (see Engine deploy row). |
 | **Model** | `gemini-3.5-flash` (switched from gemini-3-flash-preview in chunk 6), `GOOGLE_CLOUD_LOCATION=global`. Shared `GenerateContentConfig` on the agent adds exponential-backoff retries (10 attempts, 0.5s→4s, jitter) for 408/429/5xx. |
 | **Agent runtime** | Vertex AI Agent Engine, deployed via `adk` CLI |
+| **Engine deploy** | Self-contained `build/engine_app/` staged by `deploy/build_engine_app.py` (vendors `race_engineer` + `shared`, rewrites imports, bakes `.env` with TOOLBOX_URL + PROJECT_ID); `adk deploy agent_engine` via `deploy/deploy_agent_engine.sh`; resource name persisted in `deploy/.engine_resource` so re-runs UPDATE the same engine. |
 | **Frames artifact** | `frames_v3.jsonl.gz` (schema 1.2) — v1: broken top speeds + overtake noise; v2: real top speeds, zero-change overtakes dropped; v3: overtake subjects remapped grid→car. Versions kept side by side, never overwritten. |
 | **BQ tooling** | MCP Toolbox for Databases — curated named queries + one SQL escape hatch. Hybrid documented in lab; we use Toolbox for the build. |
 | **BQ dataset region** | us-central1 (matches bucket) |
@@ -222,11 +228,19 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 - DEMO.md grew an "Attack Mode in sixty seconds" teaching section (exactly two activations, fixed durations with no early exit, the SC clock trap, the activation-zone position sacrifice) plus a scenario question in the bank.
 - New dep: google-cloud-speech (requirements, floor); `speech.googleapis.com` enabled.
 
+### Chunk 12 — Agent Engine deploy ✅ (the agent leaves the laptop)
+
+- **`deploy/build_engine_app.py`** — stages a self-contained `build/engine_app/`: `adk deploy agent_engine` ships ONLY the folder you point it at (no extra-packages mechanism in this CLI generation), so the repo's two top-level packages are vendored in. `race_engineer/` is copied with imports rewritten (`agent.race_engineer` → `race_engineer`); `shared/` is copied verbatim; `agent.py` is a sys.path-bootstrap shim re-exporting `root_agent` (the CLI's generated app does `from .agent import root_agent`, so the name is mandatory). Bakes `.env` (Vertex mode, `GOOGLE_CLOUD_LOCATION=global`, TOOLBOX_URL, PROJECT_ID) and a minimal engine `requirements.txt`. Idempotent: wipes and rebuilds each run; self-checks for unrewritten imports and importability before finishing.
+- **`deploy/deploy_agent_engine.sh`** — stages, deploys, persists. Parses the `reasoningEngines` resource name from the deploy log into `deploy/.engine_resource`; re-runs pass `--agent_engine_id` so the SAME engine updates in place. Grants the Agent Engine service agent (`service-PROJECT_NUMBER@gcp-sa-aiplatform-re.iam.gserviceaccount.com`) `roles/datastore.user` AFTER the deploy — the service agent doesn't exist until the first deploy creates it, so post-deploy ordering is the only sequence that always works (and it's idempotent on updates). The create step is blocking with no progress output (5-10 min); the script prints a `gcloud logging read` one-liner for watching build logs from a second terminal.
+- **`scripts/engine_smoke.py`** — remote smoke test: reads `.engine_resource`, prints the engine's registered operations first (so SDK method drift shows what IS available instead of a bare AttributeError), opens a session, asks one BigQuery-path question and one Firestore-path question, times each, and dumps raw events on any empty answer. `--verbose` prints tool responses.
+- **Found + fixed — the project-number Firestore 404:** first smoke run answered the BigQuery question but returned EMPTY on the Firestore question; Logs Explorer showed `404 The database (default) does not exist for project 83898679865`. The database existed, APIs on, IAM correct (a permissions problem would have been 403). Root cause: Agent Engine supplies `GOOGLE_CLOUD_PROJECT` as the project **NUMBER**, and Firestore rejects number-addressed database paths with that misleading "does not exist" error. `state_client.py` preferred `GOOGLE_CLOUD_PROJECT`, which is the ID locally (activate.sh) but the number on the engine. Fix: `build_engine_app.py` bakes `PROJECT_ID` (the real ID) into the engine `.env`; `state_client.get_state_client()` now prefers `PROJECT_ID` over `GOOGLE_CLOUD_PROJECT` and warns if the resolved value is all digits.
+- **Verified:** redeploy + `engine_smoke.py` green on both worlds — BigQuery via Toolbox ("Antonio, you are driving car 13 for TAG Heuer Porsche", 7.8s) and Firestore live state against a running replay ("P6. Energy is 94.1 percent remaining", 4.8s). The deploy's IAM grant ran clean in the post-deploy position.
+
 ---
 
 ## In progress
 
-**Chunk 12 — Agent Engine deploy.** The agent leaves the laptop: `adk deploy agent_engine` with `shared/` bundled via `--extra-packages`, env plumbed (TOOLBOX_URL, project, region). The frontend gains an env switch between local InMemoryRunner and the deployed engine — local stays the dev path.
+**Chunk 13 — Frontend to Cloud Run + auth flip.** Containerize and deploy the frontend; switch it (via env) from local InMemoryRunner to the deployed engine; flip Toolbox to authenticated (service-account invoker); tighten State Writer auth. Output: the full demo URL.
 
 ---
 
@@ -234,7 +248,6 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 12 | Agent → Agent Engine | `adk deploy agent_engine` (with shared/ bundled), frontend talks to remote agent |
 | 13 | Frontend → Cloud Run, auth flip | Toolbox to authenticated, service account invoker bindings, State Writer auth tightened, full demo URL |
 | 14 | Demo dry run | Laps 1–10 at 1.0× speed; capture what the agent says |
 | 15 | *(Stretch)* | BQML AM score tool; Gemini Live spike |
@@ -314,11 +327,17 @@ These didn't make the build doc but matter for downstream work:
 - IAM changes take 1–3 min to propagate to push delivery; Pub/Sub's retry backoff re-delivers automatically once the binding lands (within the 600s `messageRetentionDuration`).
 - Fixed in `deploy/deploy_state_writer.sh` (binding now targets `${SA_EMAIL}`, with explanatory comment).
 
-**Deterministic event IDs = idempotent ingestion (the canonical at-least-once answer):**
-- Pub/Sub is at-least-once; replays re-deliver everything. Auto-ID event docs duplicated on both (seen live: triplicate lap_completed events).
-- Fix: doc ID derived from content — `{race_id}_{race_time_s}_{event_type}_{car|x}_{sha1(data)[:12]}`. Redelivery and replays converge to the same docs.
-- Side effect (feature): byte-identical events in the same frame collapse to one doc.
-- Strong teach point for the lab: make the *write* idempotent, not the delivery exact.
+**Agent Engine supplies GOOGLE_CLOUD_PROJECT as the project NUMBER (the marquee chunk-12 gotcha, Fork 4 candidate):**
+- On Vertex AI Agent Engine, the runtime env sets `GOOGLE_CLOUD_PROJECT` to the project NUMBER (e.g. 83898679865), consistent with the engine's own resource name — locally, activate.sh sets it to the project ID.
+- Firestore rejects number-addressed database paths with `404 The database (default) does not exist for project <NUMBER>` — the error ACTIVELY MISDIRECTS toward "create a database." The DB exists; the path is just addressed by number. (IAM problems would be 403, not 404.)
+- The tell is IN the error string: a project number where an ID should be. Read the resource path in the error, not just the error class. (Even Gemini Cloud Assist circled this one — verified DB/APIs/IAM all fine — without landing the root cause.)
+- Fix pattern: bake the real project ID into the engine `.env` (`PROJECT_ID`), and have client init prefer `PROJECT_ID` over `GOOGLE_CLOUD_PROJECT` (plus a warning if the resolved project is all digits).
+
+**Agent Engine service agent is created by the first deploy:**
+- `service-PROJECT_NUMBER@gcp-sa-aiplatform-re.iam.gserviceaccount.com` doesn't exist until an engine has been deployed in the project — so grant its Firestore role AFTER the deploy step. Post-deploy granting is idempotent on updates; pre-deploy granting fails on a fresh project.
+
+**`adk deploy agent_engine` stages only the target folder:**
+- `source_packages` = [the folder you point it at], unconditionally — no extra-packages mechanism in this CLI generation. Any top-level repo packages the agent imports must be VENDORED into the staged folder (with imports rewritten if the package path changes). The generated app does `from .agent import root_agent`, so the staged folder must contain an `agent.py` exposing that name.
 
 **frames_v1 → frames_v2 (data quality fixes found in live integration):**
 - The broken `laps.top_speed` (always 0) had propagated into frame `lap_completed` events. v2 recovers real values from per-lap MAX of 20 Hz telemetry — same derivation as BQ `top_speed_per_lap`, anchor-validated against DAC laps 1–5 (exact to 0.1 km/h).
@@ -382,10 +401,10 @@ These didn't make the build doc but matter for downstream work:
 - [x] Lap-1 ring calibration — root fixed in chunk 11 (tracking starts at the green flag)
 - [x] Chunk 10 — TTS (Chirp 3 HD via radio_broadcast wrapper; digits normalization; DEMO.md)
 - [x] Chunk 11 — STT push-to-talk (Chirp 2, spacebar PTT, visible transcript; enable_apis.sh)
+- [x] Chunk 12 — agent to Agent Engine (build_engine_app vendoring, deploy script + .engine_resource, engine_smoke green; project-number Firestore gotcha fixed)
 - [ ] README final pass — discuss structure before writing (quick start, architecture map, pointer to DEMO.md/PROGRESS.md, lab setup order incl. enable_apis.sh as step zero); do this when the architecture stops moving (post-chunk-13)
 - [ ] README rewrite — deliberate end-of-project pass; discuss structure and audience first (quick start vs pointers to DEMO.md / PROGRESS; student vs instructor reader)
 - [ ] README rewrite at the end (chunk 14 era): discuss structure first — setup path (enable_apis.sh as step zero), architecture overview, run instructions, pointers to DEMO.md and PROGRESS.md; write once the deploy story (chunks 12-13) is settled
-- [ ] Chunk 12 — agent to Agent Engine
 - [ ] Chunk 13 — frontend to Cloud Run, auth flip
 - [ ] Chunk 14 — demo dry run
 - [ ] Chunk 15 — stretch (BQML, Gemini Live)

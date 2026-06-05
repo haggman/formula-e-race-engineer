@@ -150,12 +150,24 @@ def get_state_client() -> StateClient:
     """
     global _singleton
     if _singleton is None:
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get(
-            "PROJECT_ID"
+        # NEW
+        # On Vertex AI Agent Engine, GOOGLE_CLOUD_PROJECT arrives as the
+        # project NUMBER (e.g. 83898679865). Firestore rejects number-
+        # addressed database paths with a misleading 404 "database (default)
+        # does not exist". PROJECT_ID is always the ID — baked into the
+        # engine .env by build_engine_app.py, set locally by activate.sh —
+        # so prefer it.
+        project_id = os.environ.get("PROJECT_ID") or os.environ.get(
+            "GOOGLE_CLOUD_PROJECT"
         )
         if not project_id:
             raise RuntimeError(
-                "GOOGLE_CLOUD_PROJECT (or PROJECT_ID) env var required"
+                "PROJECT_ID (or GOOGLE_CLOUD_PROJECT) env var required"
+            )
+        if project_id.isdigit():
+            logger.warning(
+                "project resolved to a numeric project NUMBER (%s); Firestore "
+                "will 404 — set PROJECT_ID to the project ID", project_id
             )
         race_id = os.environ.get("RACE_ID", "berlin_2024_r10")
         _singleton = StateClient(project_id=project_id, race_id=race_id)

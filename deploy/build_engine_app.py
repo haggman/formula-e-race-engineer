@@ -32,6 +32,7 @@ import sys
 REPO = pathlib.Path(__file__).resolve().parent.parent
 BUILD = REPO / "build" / "engine_app"
 TOOLBOX_URL = os.environ.get("TOOLBOX_URL", "")
+PROJECT_ID = os.environ.get("PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT", "")
 
 AGENT_PY = '''"""Agent Engine entrypoint shim.
 
@@ -59,6 +60,7 @@ pydantic>=2.7
 ENV = f"""GOOGLE_GENAI_USE_VERTEXAI=1
 GOOGLE_CLOUD_LOCATION=global
 TOOLBOX_URL={TOOLBOX_URL}
+PROJECT_ID={PROJECT_ID}
 """
 
 
@@ -82,7 +84,9 @@ def main() -> None:
     if not TOOLBOX_URL:
         sys.exit("TOOLBOX_URL is not set — run `source activate.sh` first "
                  "so the engine knows where MCP Toolbox lives.")
-
+    if not PROJECT_ID:
+        sys.exit("PROJECT_ID is not set — run `source activate.sh` first.")
+        
     if BUILD.exists():
         shutil.rmtree(BUILD)
     BUILD.mkdir(parents=True)
