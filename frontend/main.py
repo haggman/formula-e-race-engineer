@@ -1,0 +1,222 @@
+"""Race Engineer frontend service (chunk 9).
+
+Pass 2: FastAPI + websocket streaming live race state AND the engineer's
+proactive radio calls (frontend/engineer_loop.py — the chunk 8 trigger
+policy as a background task). Pass 3 adds Q&A over the same socket.
+
+Run locally (Cloud Shell, Web Preview on 8080):
+    uvicorn frontend.main:app --host 0.0.0.0 --port 8080
+"""
+from __future__ import annotations
+
+import asyncio
+import contextlib
+import json
+import logging
+import os
+from pathlib import Path
+
+import httpx
+from fastapi import Body, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
+
+from agent.race_engineer.config import OUR_CAR_NUMBER
+from agent.race_engineer.tools.state_client import get_state_client
+from frontend.engineer_loop import EngineerLoop
+from shared.models import RaceState
+
+logger = logging.getLogger("frontend")
+STATIC_DIR = Path(__file__).parent / "static"
+POLL_INTERVAL_S = 1.0
+SIM_URL = os.environ.get("SIM_URL", "").rstrip("/")
+
+
+# ============================================================================
+# Websocket connection registry
+# ============================================================================
+
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self._connections: set[WebSocket] = set()
+
+    async def connect(self, ws: WebSocket) -> None:
+        await ws.accept()
+        self._connections.add(ws)
+        logger.info("client connected (%d total)", len(self._connections))
+
+    def disconnect(self, ws: WebSocket) -> None:
+        self._connections.discard(ws)
+        logger.info("client disconnected (%d total)", len(self._connections))
+
+    async def broadcast(self, message: dict) -> None:
+        """Send to every client; drop the ones that have gone away."""
+        if not self._connections:
+            return
+        payload = json.dumps(message)
+        dead: list[WebSocket] = []
+        for ws in self._connections:
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+
+manager = ConnectionManager()
+engineer: EngineerLoop | None = None        # set in lifespan
+latest = {"race_time_s": 0, "lap": None}    # for stamping Q&A log entries
+
+
+# ============================================================================
+# State payload for the UI
+# ============================================================================
+
+
+def ui_state(state: RaceState) -> dict:
+    """Full-field payload for the position tower + our-car panel."""
+    cars = []
+    for c in sorted(state.cars, key=lambda c: (c.is_retired, c.position)):
+        cars.append({
+            "car": c.car_number,
+            "driver": c.driver_short_name,
+            "position": c.position,
+            "lap": c.current_lap,
+            "am_active": c.attack_mode.active,
+            "am_used": c.attack_mode.activations_used,
+            "retired": c.is_retired,
+            "us": c.car_number == OUR_CAR_NUMBER,
+        })
+    our = state.car_by_number(OUR_CAR_NUMBER)
+    return {
+        "type": "state",
+        "race_time_s": state.race_time_s,
+        "race_phase": state.race_phase.value,
+        "cars": cars,
+        "our": None if our is None else {
+            "position": our.position,
+            "lap": our.current_lap,
+            "energy_pct": round(our.energy.pct_remaining, 1),
+            "am_active": our.attack_mode.active,
+            "am_used": our.attack_mode.activations_used,
+            "am_budget_s": our.attack_mode.remaining_budget_s,
+            "am_scenario": our.attack_mode.scenario,
+        },
+    }
+
+
+# ============================================================================
+# Background poller (Pass 2 grows this into the trigger loop)
+# ============================================================================
+
+
+async def state_poller() -> None:
+    client = get_state_client()
+    while True:
+        try:
+            state = client.get_race_state(fresh=True)
+            if state is not None:
+                payload = ui_state(state)
+                latest["race_time_s"] = payload["race_time_s"]
+                latest["lap"] = payload["our"]["lap"] if payload["our"] else None
+                await manager.broadcast(payload)
+        except Exception:
+            logger.exception("state poll failed")
+        await asyncio.sleep(POLL_INTERVAL_S)
+
+
+# ============================================================================
+# App
+# ============================================================================
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app: FastAPI):
+    global engineer
+    poller = asyncio.create_task(state_poller())
+    engineer = EngineerLoop(manager.broadcast)
+    engineer_task = asyncio.create_task(engineer.run())
+    yield
+    for task in (poller, engineer_task):
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+    await engineer.close()
+
+
+app = FastAPI(title="Race Engineer", lifespan=lifespan)
+
+
+@app.get("/")
+async def index() -> FileResponse:
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+async def _handle_ask(question: str) -> None:
+    stamp = {"race_time_s": latest["race_time_s"], "lap": latest["lap"]}
+    try:
+        answer = await engineer.ask(question)
+        await manager.broadcast({"type": "radio", "kind": "qa",
+                                 "text": answer, **stamp})
+    except Exception as e:
+        logger.warning("qa failed: %s", str(e).splitlines()[0][:160])
+        await manager.broadcast({"type": "radio", "kind": "qa",
+                                 "text": "Radio failure on that one — ask again.",
+                                 "error": True, **stamp})
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(ws: WebSocket) -> None:
+    await manager.connect(ws)
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            question = (data.get("question") or "").strip()
+            if data.get("type") == "ask" and question and engineer:
+                await manager.broadcast({
+                    "type": "radio", "kind": "question", "text": question,
+                    "race_time_s": latest["race_time_s"], "lap": latest["lap"],
+                })
+                asyncio.create_task(_handle_ask(question))
+    except WebSocketDisconnect:
+        manager.disconnect(ws)
+
+
+# ============================================================================
+# Simulator control proxy (pit-wall systems panel)
+# ============================================================================
+
+_SIM_ACTIONS = {
+    "restart": "/restart",
+    "pause": "/pause",
+    "resume": "/resume",
+    "speed": "/speed",
+    "auto-restart": "/auto-restart",
+}
+
+
+@app.get("/api/sim/config")
+async def sim_config() -> dict:
+    if not SIM_URL:
+        raise HTTPException(503, "SIM_URL not configured")
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{SIM_URL}/config", timeout=10)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/api/sim/{action}")
+async def sim_control(action: str, payload: dict | None = Body(default=None)) -> dict:
+    if action not in _SIM_ACTIONS:
+        raise HTTPException(404, f"unknown sim action: {action}")
+    if not SIM_URL:
+        raise HTTPException(503, "SIM_URL not configured")
+    async with httpx.AsyncClient() as client:
+        r = await client.post(f"{SIM_URL}{_SIM_ACTIONS[action]}", json=payload, timeout=15)
+        r.raise_for_status()
+        return r.json()

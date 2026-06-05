@@ -50,6 +50,7 @@ from agent.race_engineer.prompts import (
     build_event_reaction_prompt,
     build_lap_summary_prompt,
 )
+from agent.race_engineer.snapshot import snapshot_dict
 from agent.race_engineer.tools.state_client import get_state_client
 from shared.models import EventType, RaceState
 from shared.scorer import DEFAULT_THRESHOLD, TriggerType, score
@@ -60,38 +61,6 @@ AM_LOOKBACK_S = 30            # race-seconds window feeding the cluster rule
 FAIL_COOLDOWN_S = 5           # after a failed call, wait this long before retrying
 MAX_LLM_CALLS_PER_TRIGGER = 4 # hard ceiling per proactive call (~2 tool rounds + answer)
 MUST_SAY_TTL_S = 25           # race-seconds a held must-say stays deliverable
-
-
-def snapshot_dict(state: RaceState) -> dict:
-    """Compact authoritative snapshot for the trigger prompt."""
-    our = state.car_by_number(OUR_CAR_NUMBER)
-    cars = sorted((c for c in state.cars if not c.is_retired),
-                  key=lambda c: c.position)
-    ahead = next((c for c in cars if our and c.position == our.position - 1), None)
-    behind = next((c for c in cars if our and c.position == our.position + 1), None)
-
-    def brief(c):
-        return None if c is None else {
-            "car": c.car_number, "driver": c.driver_short_name, "position": c.position,
-            "am_active": c.attack_mode.active,
-            "am_activations_used": c.attack_mode.activations_used,
-        }
-
-    return {
-        "race_time_s": state.race_time_s,
-        "race_wall_time_ns": race_time_to_wall_ns(state.race_time_s),
-        "race_phase": state.race_phase.value,
-        "our": None if our is None else {
-            "position": our.position, "lap": our.current_lap,
-            "energy_pct_remaining": round(our.energy.pct_remaining, 1),
-            "am_active": our.attack_mode.active,
-            "am_activations_used": our.attack_mode.activations_used,
-            "am_remaining_budget_s": our.attack_mode.remaining_budget_s,
-            "am_scenario": our.attack_mode.scenario,
-        },
-        "car_ahead": brief(ahead),
-        "car_behind": brief(behind),
-    }
 
 
 async def fire(runner: InMemoryRunner, prompt: str, verbose: bool) -> tuple[str, int, float]:

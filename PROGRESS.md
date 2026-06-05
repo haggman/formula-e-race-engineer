@@ -2,13 +2,13 @@
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)  
 **Build doc:** [Challenge 2 Build Document](https://docs.google.com/document/d/16NqXYak3NSLkNq__ycyMNDbz-5f6bug4NHlINiCxoV4/edit)  
-**Last updated:** 2026-06-04 (chunk 8 complete — reasoning iteration done; all five work-order items closed, fact-check passed against ground truth)
+**Last updated:** 2026-06-04 (chunk 9 complete — frontend live: websocket UI, engineer loop in-service, Q&A, sim controls)
 
 ---
 
 ## Where we are
 
-Chunks 1–8 complete. The reasoning layer is demo-grade: per-type debounce with a pending must-say hold (every AM moment announced, with correct per-scenario durations), hard tool-budget ceiling (validated in anger — it killed a malformed-SQL wander), latency in the 8-13s band, coaching filler scrubbed, and a line-by-line fact-check against BQ ground truth with every end-of-lap-anchored claim exact — including live narration of the lap-7→9 attack-loop detour (P1 → activates → P3). Next: chunk 9, the frontend service.
+Chunks 1–9 complete. The demo surface is live: a pit-wall web UI (position tower with AM badges, energy needle gauge with regen indicator, lap-progress ring, position delta) fed over a websocket by a FastAPI service that runs the chunk 8 trigger policy as a background task and answers pit-wall Q&A in a persistent session — proactive calls and researched answers interleaving in one radio log, with simulator controls (restart/pause/speed/loop) proxied into the page. Next: chunk 10, TTS — the engineer gets a voice.
 
 ---
 
@@ -190,11 +190,22 @@ Fixed end-to-end:
 
 Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1, MUST-SAY 3}, suppressed 31, dropped 1 (budget ceiling).
 
+### Chunk 9 — Frontend service ✅ (three passes + cockpit polish)
+
+- **Pass 1 — skeleton.** `frontend/main.py`: FastAPI app, `/ws` websocket, lifespan-managed state poller broadcasting the FULL field (`ui_state` — all 22 cars, AM state, retirements) at 1s cadence. `frontend/static/index.html`: single-page pit-wall UI, no build step, vanilla JS with reconnect/backoff. The UI and the agent intentionally get different views of RaceState (full tower vs trimmed snapshot).
+- **Pass 2 — the engineer in-service.** `frontend/engineer_loop.py`: the chunk 8 trigger policy verbatim as an `EngineerLoop` background task — must-say hold, sticky overdue summaries, budget ceiling, drop-don't-crash with cooldown — broadcasting `{type:"radio"}` instead of printing. `snapshot_dict` moved to `agent/race_engineer/snapshot.py`, shared by harness and frontend (local_test.py imports it).
+- **Pass 3 — Q&A.** ASK bar over the same websocket. Persistent session (`pit-wall-qa`) per the locked decision — follow-ups keep context. Q&A tool ceiling 12 vs triggers' 4 (a human asked; research allowed, runaway not). Questions echo to all clients tagged YOU; answers interleave with proactive calls; failures degrade in-character ("Radio failure on that one — ask again."). Verified live: a quantified energy-vs-rival answer landed while event calls kept firing around it.
+- **Cockpit polish (demo-driven):** energy as SVG needle gauge with ▲ REGEN indicator (rises >0.05%/sample — regenerative braking made visible; demo talking point); lap-progress sweep ring, alternating colors painting over the previous lap, snap-reset at boundaries (transitions suspended for that frame); position delta badge (▲/▼ vs lap start — makes the attack-loop detour pop). Needle bug fixed: SVG attribute rotation only, never mixed with CSS transform-origin.
+- **SIM systems bar:** restart / pause-resume / speed (1×/2×/5×) / LOOP (the sim's auto-restart), proxied server-side via `/api/sim/*` (whitelisted actions, `SIM_URL` env) — no CORS, sim URL stays out of the browser; bar re-syncs from `/config` after restart. `/jump` deliberately excluded from the UI.
+- **Restart robustness (both sides):** the engineer loop detects race time going backwards and flushes all trigger state (the stale `last_summary_lap` from a previous run had silently disabled summaries); the browser flushes lap/energy tracking when the lap number drops.
+- New deps: fastapi, uvicorn[standard], httpx (requirements.txt, floors).
+- Known cosmetic, deferred to the next UI pass: lap-1 ring calibrates from the pre-race countdown (t≈−10s), so it fills ~10s early and sits full until lap 2.
+
 ---
 
 ## In progress
 
-**Chunk 9 — frontend service.** FastAPI + websocket + Firestore reader + browser UI (text-only; TTS is chunk 10). Reuses shared/scorer.py, the trigger policy and prompt builders from local_test.py, and the async Runner pattern — the harness loop becomes a background task pushing state + radio calls over a websocket.
+**Chunk 10 — TTS.** The engineer's calls get spoken: Chirp 3 HD voice (en-GB male, 1.15× rate per the locked decision), wired into the frontend's radio broadcast path so each `{type:"radio"}` message carries or fetches audio. The persona's TTS normalization rules (numbers, units, no markdown) have been in the prompt since chunk 6 waiting for this.
 
 ---
 
@@ -202,7 +213,6 @@ Last scoreboard: fired {event_reaction 5, lap_summary[OVERDUE] 5, lap_summary 1,
 
 | # | Chunk | What it produces |
 |---|---|---|
-| 9 | Frontend (text-only) | `frontend/` — FastAPI + websocket + Firestore reader + browser UI. No Pub/Sub here; State Writer owns ingestion. |
 | 10 | TTS wired in | Chirp 3 British male, 1.15× rate, browser playback |
 | 11 | STT + push-to-talk | MediaRecorder + Cloud STT v2 |
 | 12 | Agent → Agent Engine | `adk deploy agent_engine` (with shared/ bundled), frontend talks to remote agent |
@@ -349,7 +359,8 @@ These didn't make the build doc but matter for downstream work:
 - [x] Re-verified DAC battle list against rebuilt v_overtakes — CAS and JEV top rivals (11 each); original DEN finding confirmed by grid coincidence
 - [x] Chunk 7 — significance scorer + local harness (pure scorer in shared/, snapshot-passing trigger loop, laps 1-10 validated)
 - [x] Chunk 8 — reasoning iteration (per-type debounce + must-say hold, 3-layer tool budget, filler scrub, fact-check passed)
-- [ ] Chunk 9 — frontend (text-only)
+- [x] Chunk 9 — frontend (websocket UI, engineer loop in-service, Q&A, sim controls)
+- [ ] Lap-1 ring calibration vs pre-race countdown (UI nitpick — fix in the next UI pass)
 - [ ] Chunk 10 — TTS
 - [ ] Chunk 11 — STT + push-to-talk
 - [ ] Chunk 12 — agent to Agent Engine
