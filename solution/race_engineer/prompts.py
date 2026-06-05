@@ -6,7 +6,7 @@ chunk 8 (reasoning iteration) refines it in place against laps 1-10.
 """
 from __future__ import annotations
 
-from agent.race_engineer.config import (
+from solution.race_engineer.config import (
     OUR_CAR_NUMBER,
     OUR_DRIVER_FIRST_NAME,
     OUR_DRIVER_SHORT_NAME,

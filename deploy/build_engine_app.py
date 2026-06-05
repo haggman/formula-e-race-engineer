@@ -3,7 +3,7 @@
 Why this exists: `adk deploy agent_engine` stages ONLY the folder you point
 it at (source_packages = [that folder] — set unconditionally, no extra-
 packages mechanism in this CLI generation). Our agent imports two top-level
-repo packages (`agent.race_engineer.*`, `shared.*`) that would not exist on
+repo packages (`solution.race_engineer.*`, `shared.*`) that would not exist on
 the engine. So we build `build/engine_app/`:
 
     engine_app/
@@ -11,8 +11,8 @@ the engine. So we build `build/engine_app/`:
       agent.py            <- sys.path bootstrap + re-exports root_agent
                              (the CLI's generated app does `from .agent
                              import root_agent`, so this name is required)
-      race_engineer/      <- vendored copy of agent/race_engineer/, with
-                             imports rewritten agent.race_engineer -> race_engineer
+      race_engineer/      <- vendored copy of solution/race_engineer/, with
+                             imports rewritten solution.race_engineer -> race_engineer
                              (renamed to avoid colliding with agent.py above)
       shared/             <- vendored verbatim (no clash, no rewrite)
       requirements.txt    <- engine runtime deps (CLI appends its own too)
@@ -73,7 +73,7 @@ def vendor(src: pathlib.Path, dst: pathlib.Path, rewrite: bool) -> int:
     if rewrite:
         for py in dst.rglob("*.py"):
             text = py.read_text()
-            new = re.sub(r"\bagent\.race_engineer\b", "race_engineer", text)
+            new = re.sub(r"\bsolution\.race_engineer\b", "race_engineer", text)
             if new != text:
                 py.write_text(new)
                 rewritten += 1
@@ -91,7 +91,7 @@ def main() -> None:
         shutil.rmtree(BUILD)
     BUILD.mkdir(parents=True)
 
-    n = vendor(REPO / "agent" / "race_engineer", BUILD / "race_engineer", rewrite=True)
+    n = vendor(REPO / "solution" / "race_engineer", BUILD / "race_engineer", rewrite=True)
     vendor(REPO / "shared", BUILD / "shared", rewrite=False)
 
     (BUILD / "__init__.py").write_text("")
@@ -102,7 +102,7 @@ def main() -> None:
     # Self-check: the staged tree must not reference the old package path,
     # and must import cleanly with the staging dir on sys.path.
     stale = [str(p) for p in BUILD.rglob("*.py")
-             if "agent.race_engineer" in p.read_text()]
+             if "solution.race_engineer" in p.read_text()]
     assert not stale, f"unrewritten imports remain: {stale}"
     sys.path.insert(0, str(BUILD))
     import importlib

@@ -13,7 +13,7 @@ Two tool families, one agent:
 The race_wall_time_ns field on frame-tool responses bridges the two clocks
 (see config.RACE_START_EPOCH_NS).
 
-`adk web` discovers this module via agent/race_engineer/__init__.py, which
+`adk web` discovers this module via solution/race_engineer/__init__.py, which
 imports it and exposes `root_agent`.
 
 Required env (exported by `source activate.sh`):
@@ -30,11 +30,11 @@ from google.adk.agents import Agent
 from google.adk.tools.toolbox_toolset import ToolboxToolset
 from google.genai import types
 
-from agent.race_engineer.prompts import (
+from solution.race_engineer.prompts import (
     ROOT_AGENT_DESCRIPTION,
     ROOT_AGENT_INSTRUCTION,
 )
-from agent.race_engineer.tools.frame_tools import (
+from solution.race_engineer.tools.frame_tools import (
     get_current_state,
     get_events_in_range,
     get_field_am_status,

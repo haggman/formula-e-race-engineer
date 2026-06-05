@@ -29,13 +29,13 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from agent.race_engineer.config import (
+from solution.race_engineer.config import (
     AM_SCENARIOS,
     AM_TOTAL_BUDGET_S,
     OUR_CAR_NUMBER,
     race_time_to_wall_ns,
 )
-from agent.race_engineer.tools.state_client import get_state_client
+from solution.race_engineer.tools.state_client import get_state_client
 from shared.models import CarState, Event, EventType, RaceState
 
 

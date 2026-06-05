@@ -23,7 +23,7 @@ import argparse
 import sys
 
 # We import via the agent package so the path mirrors how ADK will call.
-from agent.race_engineer.tools.frame_tools import (
+from solution.race_engineer.tools.frame_tools import (
     get_current_state,
     get_events_in_range,
     get_field_am_status,

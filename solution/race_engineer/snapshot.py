@@ -4,7 +4,7 @@ and frontend (the service). Lives in the agent package because it depends on
 agent config (car number, time bridge)."""
 from __future__ import annotations
 
-from agent.race_engineer.config import OUR_CAR_NUMBER, race_time_to_wall_ns
+from solution.race_engineer.config import OUR_CAR_NUMBER, race_time_to_wall_ns
 from shared.models import RaceState
 
 

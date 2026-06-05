@@ -39,3 +39,4 @@ htmlcov/
 
 # Misc
 .venv/
+.adk/

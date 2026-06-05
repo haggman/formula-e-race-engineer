@@ -10,4 +10,4 @@ import importlib.util
 import os
 
 if importlib.util.find_spec("google.adk") is not None and os.environ.get("TOOLBOX_URL"):
-    from agent.race_engineer import agent  # noqa: F401 — exposes root_agent for adk web
+    from solution.race_engineer import agent  # noqa: F401 — exposes root_agent for adk web

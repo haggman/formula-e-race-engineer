@@ -44,14 +44,14 @@ from google.adk.agents.run_config import RunConfig
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from agent.race_engineer.agent import root_agent
-from agent.race_engineer.config import OUR_CAR_NUMBER, race_time_to_wall_ns
-from agent.race_engineer.prompts import (
+from solution.race_engineer.agent import root_agent
+from solution.race_engineer.config import OUR_CAR_NUMBER, race_time_to_wall_ns
+from solution.race_engineer.prompts import (
     build_event_reaction_prompt,
     build_lap_summary_prompt,
 )
-from agent.race_engineer.snapshot import snapshot_dict
-from agent.race_engineer.tools.state_client import get_state_client
+from solution.race_engineer.snapshot import snapshot_dict
+from solution.race_engineer.tools.state_client import get_state_client
 from shared.models import EventType, RaceState
 from shared.scorer import DEFAULT_THRESHOLD, TriggerType, score
 

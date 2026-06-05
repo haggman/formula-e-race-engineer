@@ -35,7 +35,7 @@ import uuid
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-from agent.race_engineer.agent import root_agent
+from solution.race_engineer.agent import root_agent
 
 APP_NAME = "race_engineer_chat"
 USER_ID = "dev"

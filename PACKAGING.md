@@ -1,7 +1,7 @@
 # PACKAGING.md — Phase 2 Progress — Formula E Race Engineer (Challenge 2)
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)
-**Last updated:** 2026-06-05 (planning session complete — no code changed yet; next action is chunk P1.1)
+**Last updated:** 2026-06-05 (P1.1 complete and regression-verified; P1.2 delivered, awaiting regression)
 
 **What this doc is:** the living record of Phase 2 (packaging the Fork 2 reference
 into the 3-hour hackathon product). `PROGRESS.md` is the FROZEN Fork 2 build
@@ -18,11 +18,14 @@ history. Pick up at the next unchecked chunk."
 
 ## Where we are
 
-Planning is complete (2026-06-05). Every open question from PACKAGING_BRIEF.md
-has a decision. The build (Fork 2, chunks 1–13) is deployed and verified per
-PROGRESS.md. Nothing in the repo has been restructured yet.
+P1.1 (the `agent/` → `solution/` rename) is DONE — sed-script migration,
+zero stragglers, compile clean, seed + frame-tools + agent_chat regression
+passed (2026-06-05). P1.2 (the AGENT_PACKAGE seam) is delivered as four
+updated files: `frontend/agent_client.py`, `frontend/engineer_loop.py`,
+`frontend/main.py`, `activate.sh`.
 
-**Next action: chunk P1.1 — the `agent/` → `solution/` rename.**
+**Next action: P1.2 regression (local frontend stint), then chunk P1.3 —
+vendor the simulator.**
 
 ---
 
@@ -99,20 +102,32 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
 
 ### P1 — Restructure + scripts (code phase)
 
-- [ ] **P1.1 — Rename `agent/` → `solution/`.** Atomic, commit one. Touch
-  inventory: ~a dozen package-internal imports (`from agent.race_engineer...`);
-  frontend ×3 (main.py, engineer_loop.py, agent_client.py); scripts ×4
-  (agent_chat, local_test, test_frame_tools, seed/reset unaffected;
-  engine_smoke indirectly); `pyproject.toml` include list; `frontend/Dockerfile`
-  `COPY agent/`; and — eyeball by hand, don't trust grep —
-  `deploy/build_engine_app.py`: BOTH its vendoring regex
-  (`\bagent\.race_engineer\b`) and its source path (`REPO / "agent" /
-  "race_engineer"`) change; its self-check assertion catches a miss.
-  Regression: seed_test_state + test_frame_tools (seed mode), agent_chat smoke.
-- [ ] **P1.2 — AGENT_PACKAGE seam.** agent_client.py importlib resolution +
-  engineer_loop.py's three import sites + activate.sh default. Regression with
-  `AGENT_PACKAGE=solution.race_engineer.agent` proving ZERO behavior change
-  vs. P1.1 baseline.
+- [x] **P1.1 — Rename `agent/` → `solution/`.** DONE 2026-06-05. Executed as
+  a `git mv` + three sed passes (dotted imports, path-style docstring refs,
+  and two targeted seds for `deploy/build_engine_app.py`'s escaped regex and
+  `REPO /` path constant — the two lines a naive replace can't see), plus
+  Dockerfile COPY and pyproject include. Verified: zero stragglers by grep,
+  `compileall` clean, build_engine_app eyeballed (its stale-check string now
+  correctly hunts `solution.race_engineer`). Regression green: editable
+  reinstall, seed_test_state + test_frame_tools, agent_chat smoke. Deployed
+  engine and Cloud Run frontend deliberately untouched (old paths baked into
+  running images; next deploy of each picks up the new layout).
+- [ ] **P1.2 — AGENT_PACKAGE seam.** DELIVERED, awaiting regression. Design
+  as built (refines the planning row above): `AGENT_PACKAGE` is the PACKAGE
+  path (`solution.race_engineer`, later `starter.race_engineer`), not the
+  agent-module path — `frontend/agent_client.py` exposes
+  `agent_module(sub)` (importlib) and LocalAgentClient grabs
+  `agent_module("agent").root_agent`. `engineer_loop.py` AND `main.py` both
+  resolve config/prompts/snapshot/state_client through the seam — main.py is
+  included so the whole frontend shares ONE state_client module (and its
+  Firestore-client singleton) instead of splitting singletons across two
+  packages. Code default is `solution.race_engineer`; `activate.sh` exports
+  the same default for now and FLIPS to `starter.race_engineer` in P1.4 when
+  the starter exists. The deployed engine-mode container never sources
+  activate.sh, so it stays on the code default (solution) — correct for the
+  instructor's cloud deploy. Regression: local frontend stint with the
+  default (zero behavior change vs. P1.1), plus a bogus-package run proving
+  the seam fails loudly.
 - [ ] **P1.3 — Vendor `simulator/`.** Move the sim repo's contents in; one
   deploy from the new path to prove `--source .` still works; archive the old
   repo with a pointer.

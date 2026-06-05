@@ -1,4 +1,5 @@
-"""Agent invocation seam (chunk 13) — one interface, two runtimes.
+"""Agent invocation seam (chunk 13; AGENT_PACKAGE added in packaging P1.2)
+— one interface, two runtimes, and now two PACKAGES.
 
     AGENT_MODE=local   InMemoryRunner in-process. The permanent dev path:
                        edit prompts.py, restart uvicorn, seconds. Chunk 9-11
@@ -6,13 +7,25 @@
                        fresh session per trigger, persistent Q&A session).
 
     AGENT_MODE=engine  The deployed Vertex AI Agent Engine, via
-                       vertexai.agent_engines + async_stream_query — the
-                       async twin of what scripts/engine_smoke.py validated.
-                       Requires AGENT_ENGINE_RESOURCE (activate.sh exports it
-                       from deploy/.engine_resource when present).
+                       vertexai.agent_engines. Requires AGENT_ENGINE_RESOURCE
+                       (activate.sh exports it from deploy/.engine_resource
+                       when present).
+
+    AGENT_PACKAGE      WHICH agent package the frontend loads — the
+                       starter/solution seam (packaging P1.2):
+                         solution.race_engineer  the complete reference
+                         starter.race_engineer   the student build
+                       Both packages share the same internal shape (agent,
+                       prompts, config, snapshot, tools.state_client), so the
+                       frontend resolves all of them through agent_module()
+                       below and a student's persona drives the trigger loop
+                       exactly as the reference does. Default lives here so
+                       the engine-mode container (which never sources
+                       activate.sh) gets the reference; activate.sh exports
+                       the per-session choice for local work.
 
 The engineer loop and Q&A handler call fire()/ask() and never know which
-runtime answered. Same agent, two runtimes, one interface.
+runtime answered. Same agent shape, two runtimes, two packages, one interface.
 
 Engine-mode design notes:
   - RunConfig(max_llm_calls) does NOT plumb through the engine's query
@@ -24,14 +37,16 @@ Engine-mode design notes:
     observed live: jerky UI, stalled /api/stt). Engine calls therefore run
     as the sync SDK methods inside asyncio.to_thread — see
     EngineAgentClient's class docstring.
-  - agent.race_engineer.agent is imported ONLY in local mode. Importing it
+  - The agent module itself is imported ONLY in local mode. Importing it
     constructs the ToolboxToolset and requires TOOLBOX_URL — which the
     engine-mode frontend deliberately does not need (the engine carries its
-    own baked .env).
+    own baked .env). The other seam modules (config/prompts/snapshot/
+    state_client) import cleanly without ADK in both modes.
 """
 from __future__ import annotations
 
 import asyncio
+import importlib
 import logging
 import os
 import time
@@ -53,6 +68,37 @@ ASK_TIMEOUT_S = float(os.environ.get("ASK_TIMEOUT_S", "75"))
 
 
 # ============================================================================
+# The package seam (packaging P1.2): starter vs solution
+# ============================================================================
+
+AGENT_PACKAGE = os.environ.get("AGENT_PACKAGE", "solution.race_engineer").strip()
+
+
+def agent_module(sub: str = ""):
+    """Import a module from the ACTIVE agent package.
+
+    agent_module("config")             -> e.g. solution.race_engineer.config
+    agent_module("tools.state_client") -> e.g. solution.race_engineer.tools.state_client
+    agent_module("agent")              -> the module exposing root_agent
+
+    Both packages mirror the same file layout, so every caller works
+    unchanged whichever package AGENT_PACKAGE selects. Raises ImportError
+    with the resolved name on a typo'd or missing package — fail loudly,
+    don't fall back.
+    """
+    name = AGENT_PACKAGE + (f".{sub}" if sub else "")
+    try:
+        return importlib.import_module(name)
+    except ImportError as e:
+        raise ImportError(
+            f"AGENT_PACKAGE={AGENT_PACKAGE!r}: could not import {name!r}. "
+            "Valid values are 'solution.race_engineer' (the reference) or "
+            "'starter.race_engineer' (the student build). Did you run "
+            "'pip install -e .' after changing packages?"
+        ) from e
+
+
+# ============================================================================
 # Local: InMemoryRunner in-process (the chunk 9-11 code, re-homed verbatim)
 # ============================================================================
 
@@ -62,10 +108,10 @@ class LocalAgentClient:
 
     def __init__(self) -> None:
         # Deferred imports: only local mode pays the ADK/Toolbox import cost
-        # (and the TOOLBOX_URL requirement that comes with agent.py).
+        # (and the TOOLBOX_URL requirement that comes with the agent module).
         from google.adk.runners import InMemoryRunner
 
-        from agent.race_engineer.agent import root_agent
+        root_agent = agent_module("agent").root_agent
 
         self.runner = InMemoryRunner(agent=root_agent, app_name=APP_NAME)
         self._qa_session_ready = False
@@ -117,7 +163,7 @@ class LocalAgentClient:
 
 
 # ============================================================================
-# Engine: the deployed Agent Engine (async_stream_query, dict events)
+# Engine: the deployed Agent Engine (sync SDK inside asyncio.to_thread)
 # ============================================================================
 
 
@@ -254,5 +300,6 @@ def make_agent_client():
     if mode != "local":
         raise RuntimeError(f"unknown AGENT_MODE {mode!r} — use 'local' or 'engine'")
 
-    logger.info("agent client: LOCAL mode (InMemoryRunner in-process)")
+    logger.info("agent client: LOCAL mode (InMemoryRunner in-process, "
+                "package %s)", AGENT_PACKAGE)
     return LocalAgentClient()

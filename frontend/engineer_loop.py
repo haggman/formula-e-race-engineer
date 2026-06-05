@@ -1,5 +1,6 @@
 """The engineer's trigger loop as a service component (chunk 9, Pass 2;
-chunk 13 rewires invocation through frontend/agent_client.py).
+chunk 13 rewires invocation through frontend/agent_client.py; packaging P1.2
+resolves the agent package through the AGENT_PACKAGE seam).
 
 This is scripts/local_test.py's loop, re-homed: poll Firestore → score with
 shared.scorer → fire the agent on triggers — except deliveries are broadcast
@@ -13,6 +14,12 @@ agent_client.fire()/ask() and doesn't know whether the agent runs in-process
 (AGENT_MODE=local) or on the deployed Agent Engine (AGENT_MODE=engine). The
 budget mechanism differs by mode — RunConfig ceiling locally, wall-clock
 timeout remotely — but the loop's drop-on-failure handling covers both.
+
+Packaging P1.2: config/prompts/snapshot/state_client resolve through
+agent_module() (the AGENT_PACKAGE seam), so when a student's
+starter.race_engineer is active, the triggers carry THEIR prompts and
+persona — not the reference's. The trigger POLICY below is infrastructure
+and stays given; only what the agent is told comes from the active package.
 """
 from __future__ import annotations
 
@@ -22,16 +29,18 @@ import logging
 import time
 from typing import Awaitable, Callable
 
-from agent.race_engineer.config import OUR_CAR_NUMBER
-from agent.race_engineer.prompts import (
-    build_event_reaction_prompt,
-    build_lap_summary_prompt,
-)
-from agent.race_engineer.snapshot import snapshot_dict
-from agent.race_engineer.tools.state_client import get_state_client
-from frontend.agent_client import make_agent_client
+from frontend.agent_client import agent_module, make_agent_client
 from shared.models import EventType
 from shared.scorer import DEFAULT_THRESHOLD, score
+
+# --- resolved through the AGENT_PACKAGE seam (starter vs solution) ---
+_config = agent_module("config")
+_prompts = agent_module("prompts")
+OUR_CAR_NUMBER = _config.OUR_CAR_NUMBER
+build_event_reaction_prompt = _prompts.build_event_reaction_prompt
+build_lap_summary_prompt = _prompts.build_lap_summary_prompt
+snapshot_dict = agent_module("snapshot").snapshot_dict
+get_state_client = agent_module("tools.state_client").get_state_client
 
 logger = logging.getLogger("engineer")
 

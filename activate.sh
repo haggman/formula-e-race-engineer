@@ -69,6 +69,13 @@ export TOOLBOX_URL="${TOOLBOX_URL:-$(gcloud run services describe fe-toolbox --r
 #          or per-run: AGENT_MODE=engine uvicorn frontend.main:app ...)
 export AGENT_MODE="${AGENT_MODE:-local}"
 
+# --- Agent package (the starter/solution seam — packaging P1.2) ---
+# Which package the frontend loads the agent (and its prompts/config) from:
+#   solution.race_engineer = the complete reference (instructor/demo)
+#   starter.race_engineer  = the student build
+# Default is the reference until starter/ exists (flips in packaging P1.4).
+export AGENT_PACKAGE="${AGENT_PACKAGE:-solution.race_engineer}"
+
 # Engine resource name — auto-loaded from the deploy script's record.
 ENGINE_RESOURCE_FILE="${REPO_ROOT}/deploy/.engine_resource"
 if [[ -z "${AGENT_ENGINE_RESOURCE:-}" && -f "$ENGINE_RESOURCE_FILE" ]]; then
@@ -85,6 +92,7 @@ echo "  Region:     $REGION"
 echo "  Venv:       $VENV_DIR"
 echo "  Python:     $(python3 --version)"
 echo "  Agent mode: $AGENT_MODE"
+echo "  Agent pkg:  $AGENT_PACKAGE"
 if [[ -n "${AGENT_ENGINE_RESOURCE:-}" ]]; then
     echo "  Engine:     $AGENT_ENGINE_RESOURCE"
 else

@@ -1,8 +1,14 @@
-"""Race Engineer frontend service (chunk 9).
+"""Race Engineer frontend service (chunk 9; packaging P1.2 routes the agent
+package through the AGENT_PACKAGE seam).
 
 Pass 2: FastAPI + websocket streaming live race state AND the engineer's
 proactive radio calls (frontend/engineer_loop.py — the chunk 8 trigger
 policy as a background task). Pass 3 adds Q&A over the same socket.
+
+Packaging P1.2: OUR_CAR_NUMBER and get_state_client resolve through
+agent_module() so the WHOLE frontend (this poller and the engineer loop)
+shares one state_client module — and therefore one Firestore-client
+singleton — from whichever package AGENT_PACKAGE selects.
 
 Run locally (Cloud Shell, Web Preview on 8080):
     uvicorn frontend.main:app --host 0.0.0.0 --port 8080
@@ -20,12 +26,15 @@ import httpx
 from fastapi import Body, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
-from agent.race_engineer.config import OUR_CAR_NUMBER
-from agent.race_engineer.tools.state_client import get_state_client
+from frontend.agent_client import agent_module
 from frontend.engineer_loop import EngineerLoop
 from frontend.stt import transcribe
 from frontend.tts import synthesize
 from shared.models import RaceState
+
+# --- resolved through the AGENT_PACKAGE seam (starter vs solution) ---
+OUR_CAR_NUMBER = agent_module("config").OUR_CAR_NUMBER
+get_state_client = agent_module("tools.state_client").get_state_client
 
 logger = logging.getLogger("frontend")
 STATIC_DIR = Path(__file__).parent / "static"
@@ -120,7 +129,7 @@ def ui_state(state: RaceState) -> dict:
 
 
 # ============================================================================
-# Background poller (Pass 2 grows this into the trigger loop)
+# Background poller
 # ============================================================================
 
 

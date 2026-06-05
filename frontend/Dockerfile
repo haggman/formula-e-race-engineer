@@ -9,7 +9,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Shared models + the agent package (prompts/config/snapshot/state_client —
 # the agent RUNTIME lives on Agent Engine; see frontend/requirements.txt)
 COPY shared/ ./shared/
-COPY agent/ ./agent/
+COPY solution/ ./solution/
 
 # The service itself (main.py, engineer_loop.py, agent_client.py, tts/stt, static UI)
 COPY frontend/ ./frontend/
