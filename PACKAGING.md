@@ -420,6 +420,37 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   merge: test_frame_tools all-green + one fused question in agent_chat).
   Surfaces in: STUDENT_GUIDE team section, RUN_OF_SHOW opening talking
   point ("four lanes, four test scripts, nobody waits on anybody").
+- PARKED (URGENT-when-back): **all backend Cloud Run services returning
+  503 simultaneously** (fe-toolbox / fe-simulator / fe-state-writer; hit
+  while re-running the local demo). Simultaneity = one environmental
+  cause, not N service bugs. Suspects, likelihood order for a lab/Argolis
+  project: (1) COLD-START CRASH after overnight scale-to-zero — something
+  changed under the containers (service account disabled, org-policy
+  enforcement job, billing state) so first morning request fails to boot
+  the instance -> 503; (2) lab project TTL/cleanup or billing disable;
+  (3) regional Cloud Run incident (rare; check status dashboard last).
+  Triage order (60s): [a] gcloud projects describe $PROJECT_ID (lifecycle
+  ACTIVE?); [b] gcloud run services list --region=$REGION (do they still
+  exist?); [c] the decisive one — startup logs of ONE failing service:
+  gcloud logging read 'resource.type="cloud_run_revision" AND
+  resource.labels.service_name="fe-toolbox" AND severity>=ERROR'
+  --freshness=1h --limit=30 — a cold-start crash names its cause in the
+  first traceback; [d] if project is dead: fresh project + setup/all.sh
+  IS the recovery path (and doubles as Test 1). NOTE: this breaks the
+  LOCAL demo too — local agent still needs fe-toolbox + SIM_URL.
+- RESOLVED incident (evening before stakeholder demo): **sudden 503s from
+  "all backend services" on the local pit wall.** Root cause: uvicorn was
+  running in a Cloud Shell session WITHOUT the manual exports (SIM_URL /
+  AGENT_PACKAGE) — Cloud Shell session recycling silently dropped them,
+  the frontend's simulator-bound calls had no target, and the UI surfaced
+  it as universal 503s. Fix: re-run the exports + relaunch. NOT auth, NOT
+  Cloud Run, NOT Gemini. Hardening for the cascade: (a) startup guard in
+  frontend local mode — if SIM_URL unset, exit with the exact export
+  command to run, instead of starting broken; (b) fold the local-launch
+  box (activate + exports + uvicorn) into a single demo.sh so launch has
+  no rememberable parts. RUN_OF_SHOW troubleshooting table gets the row:
+  "everything 503s locally -> your session lost its env; re-run the
+  launch box."
 - PARKED (post-demo): **troubleshoot LOCAL Q&A latency.** Even in local
   mode (InMemoryRunner, agent_chat / local pit wall) the engineer sometimes
   takes very long to answer. Hypotheses to test, in rough likelihood order:
@@ -430,14 +461,43 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   MAX_LLM_CALLS_PER_QA=12 permits deep research loops, and each tool call =
   a full LLM round trip + (for Toolbox tools) a network hop to fe-toolbox;
   (3) the model wandering into schema discovery / execute_sql_bq when a
-  curated tool would have answered. Diagnostic plan: add per-step timing to
+  curated tool would have answered; (4) Q&A SESSION GROWTH compounding
+  with (1): the persistent session replays full history every question,
+  and bigger requests both run slower AND burn more tokens-per-minute
+  quota -> more 429s -> more backoff. (Can't explain trigger drops —
+  those are fresh sessions — but is a genuine Q&A multiplier.)
+  Candidate session-management fixes if measurement confirms (4), cheap
+  to rich: turn-cap rotation (recreate every N questions); SLIDING
+  WINDOW — fresh session per question + last 2-3 exchanges as preamble
+  (keeps follow-ups, caps growth — likely winner); or full
+  trigger-style: fresh session + snapshot + recent-exchange summary per
+  question (most consistent with the trigger design philosophy). Diagnostic plan: add per-step timing to
   agent_chat (timestamp each tool call + each LLM gap), turn on genai client
-  retry logging to make backoff visible, and time one known-fast question
+  retry logging to make backoff visible, time one known-fast question
   (pure get_current_state) vs one fused question in the same minute —
-  separates quota weather from chain depth. Possible outcomes: an
-  ASK-side progress indicator ("engineer is checking history...") in the
-  UI, a tighter QA call ceiling, or prompt guidance steering to curated
-  tools first. Fold findings into RUN_OF_SHOW troubleshooting.
+  separates quota weather from chain depth — and log per-Q&A (turn count,
+  input tokens, wall secs): latency climbing with turns = hypothesis 4
+  confirmed, build the sliding window; flat-but-spiky = quota weather,
+  build the progress indicator. TELEMETRY plan (do this first — it's free): (i) local: crank
+  google_genai + httpx loggers to DEBUG in agent_chat — the genai client
+  LOGS its retry attempts, so one slow question photographs the backoff
+  (429 -> growing gaps -> retry); (ii) richer: ADK's built-in
+  OpenTelemetry tracing / Cloud Trace on the engine side — span waterfall
+  per Q&A turns "took 40s" into "31s = two backoff stalls on calls 2+4";
+  (iii) keep the per-Q&A log line (turns, input tokens, wall secs).
+  SESSION-TECH research note: the deployed path ALREADY uses Agent Engine
+  managed sessions (that's what _new_session_sync creates) — and local
+  slowness reproduces under InMemoryRunner, so storage location is NOT
+  the cost; replayed TOKENS are. Managed session offload != faster.
+  Worth researching instead: Memory Bank-style managed extraction
+  (compact memories vs verbatim replay — the sliding-window idea as a
+  service), checking what ADK 1.x can reach vs 2.0-only. Possible
+  outcomes: sliding window (still favorite), an ASK-side progress
+  indicator ("checking history..."), tighter QA call ceiling, prompt
+  steering to curated tools. DEMO-DAY note: 40s silent answers are the
+  real cost — until fixed, mitigate theatrically (paused race so Q&A owns
+  the quota lane, talk over the gap, ask a warm-up question at T-5).
+  Fold findings into RUN_OF_SHOW troubleshooting.
 - PARKED (post-demo, with the T2/T4 cascade): **BONUS.md bonus board** for
   fast finishers — additive-only, never carve features out of the given
   product (SIM bar is load-bearing for troubleshooting + demo). Structure:
