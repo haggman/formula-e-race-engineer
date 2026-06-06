@@ -50,7 +50,7 @@ fi
 ENGINE_RESOURCE="$(tr -d '[:space:]' < "$ENGINE_FILE")"
 
 # --- The simulator (for the SIM control bar proxy) ---
-SIM_URL="${SIM_URL:-$(gcloud run services describe fe-simulator --region "$REGION" --format='value(status.url)' 2>/dev/null)}"
+SIM_URL="${SIM_URL:-$(gcloud run services describe fe-simulator --region "$REGION" --format='value(status.url)' 2>/dev/null || true)}"
 if [[ -z "$SIM_URL" ]]; then
     echo "WARN: fe-simulator not found — SIM bar will show 'sim: unreachable'." >&2
 fi
