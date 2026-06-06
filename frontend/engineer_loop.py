@@ -158,6 +158,8 @@ class EngineerLoop:
                 last_summary_lap = None
                 due_summary_lap = None
                 pending_must_say = None
+                self.agent.reset_qa_session()  # Finding #10: a new race
+                logger.info("Q&A session rotated for the new race")
 
             from_s = (last_scored_to + 1) if last_scored_to is not None \
                 else max(0, now_s - int(self.poll_s) * 10)

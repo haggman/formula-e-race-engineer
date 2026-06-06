@@ -100,7 +100,7 @@ class LocalAgentClient:
         root_agent = agent_module("agent").root_agent
 
         self.runner = InMemoryRunner(agent=root_agent, app_name=APP_NAME)
-        self._qa_session_ready = False
+        self._qa_session_id: str | None = None
 
     async def _run(self, session_id: str, message: str, max_llm_calls: int
                    ) -> tuple[str, int]:
@@ -134,15 +134,23 @@ class LocalAgentClient:
         return text, tools, time.monotonic() - t0
 
     async def ask(self, question: str) -> str:
-        """Pit-wall Q&A in the PERSISTENT session — follow-ups keep context."""
-        if not self._qa_session_ready:
+        """Pit-wall Q&A in a PERSISTENT session — follow-ups keep context.
+        The session rotates on replay restart (reset_qa_session), so a new
+        race never inherits tool results from the previous one (Finding #10).
+        """
+        if self._qa_session_id is None:
+            self._qa_session_id = f"{QA_SESSION_ID}-{uuid.uuid4().hex[:8]}"
             await self.runner.session_service.create_session(
-                app_name=APP_NAME, user_id=USER_ID, session_id=QA_SESSION_ID
+                app_name=APP_NAME, user_id=USER_ID,
+                session_id=self._qa_session_id,
             )
-            self._qa_session_ready = True
-        text, _ = await self._run(QA_SESSION_ID, question,
+        text, _ = await self._run(self._qa_session_id, question,
                                   MAX_LLM_CALLS_PER_QA)
         return text
+
+    def reset_qa_session(self) -> None:
+        """Drop the persistent Q&A session; the next ask starts fresh."""
+        self._qa_session_id = None
 
     async def close(self) -> None:
         await self.runner.close()
@@ -284,6 +292,12 @@ class EngineAgentClient:
 
         return await asyncio.wait_for(
             asyncio.to_thread(_go), timeout=ASK_TIMEOUT_S)
+
+    def reset_qa_session(self) -> None:
+        """Drop the persistent Q&A session id; the next ask creates a
+        fresh session on the engine (the old one is simply abandoned —
+        fine in an ephemeral lab project). Finding #10."""
+        self._qa_session_id = None
 
     async def close(self) -> None:
         return None  # nothing to release client-side
