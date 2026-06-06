@@ -46,7 +46,7 @@
   .row .pos { width: 30px; color: var(--dim); text-align: right; }
   .row.us .pos { color: var(--accent); font-weight: 700; }
   .row .num { width: 34px; color: var(--dim); }
-  .row .drv { flex: 1; }
+  .row .drv { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .row .ambadge {
     font-size: 10px; padding: 1px 6px; border-radius: 8px;
     border: 1px solid var(--am); color: var(--am); visibility: hidden;
@@ -193,6 +193,32 @@
 </main>
 <script>
 const $ = id => document.getElementById(id);
+// Driver surname map — GENERATED from fe_race10.drivers (pre_push_patch.py).
+// The frozen 2024 entry list; surnames match what the radio voice says.
+const DRIVERS = {
+  "DEN": { last: "Dennis", full: "Jake Dennis" },
+  "VAN": { last: "Vandoorne", full: "Stoffel Vandoorne" },
+  "SET": { last: "Sette C\u00e2mara", full: "S\u00e9rgio Sette C\u00e2mara" },
+  "ERI": { last: "Eriksson", full: "Joel Eriksson" },
+  "HUG": { last: "Hughes", full: "Jake Hughes" },
+  "GUE": { last: "G\u00fcnther", full: "Maximilian G\u00fcnther" },
+  "BAR": { last: "Barnard", full: "Taylor Barnard" },
+  "EVA": { last: "Evans", full: "Mitch Evans" },
+  "DIG": { last: "Di Grassi", full: "Lucas Di Grassi" },
+  "DAC": { last: "Da Costa", full: "Ant\u00f3nio F\u00e9lix Da Costa" },
+  "ARO": { last: "Aron", full: "Paul Aron" },
+  "NAT": { last: "Nato", full: "Norman Nato" },
+  "DAR": { last: "Daruvala", full: "Jehan Daruvala" },
+  "KIN": { last: "King", full: "Jordan King" },
+  "ROW": { last: "Rowland", full: "Oliver Rowland" },
+  "FEN": { last: "Fenestraz", full: "Sacha Fenestraz" },
+  "JEV": { last: "Vergne", full: "Jean-\u00c9ric Vergne" },
+  "TIC": { last: "Ticktum", full: "Dan Ticktum" },
+  "CAS": { last: "Cassidy", full: "Nick Cassidy" },
+  "MOR": { last: "Mortara", full: "Edoardo Mortara" },
+  "VDL": { last: "Van Der Linde", full: "Kelvin Van Der Linde" },
+  "WEH": { last: "Wehrlein", full: "Pascal Wehrlein" },
+};
 const GAUGE_LEN = 251.3;   // semicircle arc length (r=80)
 const RING_LEN = 226.2;    // lap ring circumference (r=36)
 
@@ -221,7 +247,7 @@ function renderState(msg) {
     row.innerHTML =
       `<span class="pos">P${c.position}</span>` +
       `<span class="num">#${c.car}</span>` +
-      `<span class="drv">${c.driver ?? "—"}</span>` +
+      `<span class="drv" title="${(DRIVERS[c.driver] || {}).full || ""}">${(DRIVERS[c.driver] || {}).last || c.driver || "—"}</span>` +
       `<span class="ambadge${c.am_active ? " on" : ""}">AM</span>` +
       `<span class="pips">${"●".repeat(c.am_used)}${"○".repeat(Math.max(0, 2 - c.am_used))}</span>`;
     tower.appendChild(row);
@@ -327,6 +353,7 @@ function addRadioCall(msg) {
     `<div class="meta">${who}${fmtClock(msg.race_time_s)} · lap ${msg.lap}` +
     (msg.kind && msg.kind !== "qa" && msg.kind !== "question"
       ? ` · <span class="tag">${msg.kind}</span>` : "") +
+    (msg.secs != null ? ` · ${msg.secs}s · ${msg.tools} tool${msg.tools === 1 ? "" : "s"}` : "") +
     `</div><div class="text">${msg.text}</div>`;
   const log = $("radiolog");
   log.insertBefore(div, pending);
