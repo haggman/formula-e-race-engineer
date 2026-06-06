@@ -97,11 +97,25 @@ fi
 #                   broad roles — classic dev-vs-deployed IAM gap.)
 echo ">>> Granting roles..."
 for role in roles/datastore.user roles/aiplatform.user roles/speech.client; do
-    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-        --member="serviceAccount:${SA_EMAIL}" \
-        --role="$role" \
-        --condition=None \
-        --quiet >/dev/null
+    # New SAs can take tens of seconds to propagate into IAM on a fresh
+    # project — retry instead of dying on "Service account ... does not exist".
+    granted=0
+    for attempt in 1 2 3 4 5 6; do
+        if gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:${SA_EMAIL}" \
+            --role="$role" \
+            --condition=None \
+            --quiet >/dev/null 2>&1; then
+            granted=1
+            break
+        fi
+        echo "    ...IAM can't see ${SA_EMAIL} yet (new SA propagating) — retry ${attempt}/6 in 10s"
+        sleep 10
+    done
+    if [[ "$granted" != "1" ]]; then
+        echo "ERROR: failed to grant $role to ${SA_EMAIL} after 6 attempts" >&2
+        exit 1
+    fi
     echo "    granted $role"
 done
 

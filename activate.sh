@@ -60,8 +60,13 @@ export GOOGLE_GENAI_USE_VERTEXAI=1
 export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
 export GOOGLE_CLOUD_LOCATION="${GOOGLE_CLOUD_LOCATION:-global}"
 
-# --- MCP Toolbox URL (auto-discovered from Cloud Run) ---
-export TOOLBOX_URL="${TOOLBOX_URL:-$(gcloud run services describe fe-toolbox --region "$REGION" --format='value(status.url)' 2>/dev/null)}"
+# --- MCP Toolbox URL (auto-discovered from Cloud Run; bounded by timeout so
+# a fresh project's first gcloud call can't silently hang the activation) ---
+if [[ -z "${TOOLBOX_URL:-}" ]]; then
+    echo ">>> Discovering TOOLBOX_URL (quick no-op if fe-toolbox isn't deployed yet)..."
+    TOOLBOX_URL="$(timeout 10 gcloud run services describe fe-toolbox --region "$REGION" --format='value(status.url)' 2>/dev/null || true)"
+fi
+export TOOLBOX_URL
 
 # --- Agent mode (chunk 13) ---
 # local  = InMemoryRunner in-process (the dev path, default)

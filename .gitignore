@@ -40,3 +40,5 @@ htmlcov/
 # Misc
 .venv/
 .adk/
+
+deploy/.engine_resource

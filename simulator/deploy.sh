@@ -69,16 +69,18 @@ gcloud pubsub topics add-iam-policy-binding "$TOPIC_NAME" \
     --role="roles/pubsub.publisher" \
     --project="$PROJECT_ID" >/dev/null
 
-# Storage reader on the frames bucket
-gcloud storage buckets add-iam-policy-binding "gs://${FRAMES_BUCKET}" \
-    --member="serviceAccount:${SA_EMAIL}" \
-    --role="roles/storage.objectViewer" >/dev/null || \
-    echo "    WARN: couldn't grant storage.objectViewer on gs://${FRAMES_BUCKET} (probably cross-project; bucket owner must grant)"
+# Frames bucket: gs://class-demo is PUBLIC-READ (allUsers objectViewer),
+# so no per-SA grant is needed — and a cross-project student account
+# couldn't bind IAM on it anyway (the old attempt printed a scary but
+# harmless ERROR). If you ever point FRAMES_BUCKET at a private bucket,
+# grant the SA roles/storage.objectViewer on it from the bucket's project.
+echo "    frames bucket gs://${FRAMES_BUCKET} is public-read — no grant needed"
 
 # --- Deploy ---
 echo ">>> Deploying Cloud Run service..."
 gcloud run deploy "$SERVICE_NAME" \
     --source=. \
+    --quiet \
     --region="$REGION" \
     --project="$PROJECT_ID" \
     --service-account="$SA_EMAIL" \
