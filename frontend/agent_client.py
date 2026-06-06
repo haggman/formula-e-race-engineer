@@ -58,7 +58,15 @@ USER_ID = "pit_wall"
 
 # Local mode — hard LLM-call ceilings (chunk 8 policy, unchanged)
 MAX_LLM_CALLS_PER_TRIGGER = 4
-MAX_LLM_CALLS_PER_QA = 12      # human-initiated: research allowed, runaway not
+MAX_LLM_CALLS_PER_QA = int(os.environ.get("QA_MAX_LLM_CALLS", "30"))
+# Q&A ceiling raised 12 -> 30 + env knob (latency audit, 2026-06-05): a
+# legitimate fused chain measured 8 LLM calls, and for HUMAN-initiated Q&A
+# a slow-correct answer beats "Radio failure" mid-research. 30 is a circuit
+# breaker (~90s worst case at ~3s/call), not policy — only true runaways
+# reach it, and a stuck ask must not burn the shared quota pool forever
+# (the trigger loop shares the process; the pit wall has no cancel button).
+# Effectively unbounded: export QA_MAX_LLM_CALLS=500 (ADK's own default).
+# Triggers keep their hard 4 — late-beats-dead is a Q&A-only asymmetry.
 QA_SESSION_ID = "pit-wall-qa"  # persistent — Q&A keeps conversational context
 
 # Engine mode — wall-clock ceilings standing in for the RunConfig one

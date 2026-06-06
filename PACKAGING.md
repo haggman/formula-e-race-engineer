@@ -1,7 +1,7 @@
 # PACKAGING.md — Phase 2 Progress — Formula E Race Engineer (Challenge 2)
 
 **Repo:** [haggman/formula-e-race-engineer](https://github.com/haggman/formula-e-race-engineer)
-**Last updated:** 2026-06-05 (P1.5 complete incl. the P1.5.1 index-poll fix; P1.6 desk checks in progress — the last P1 gate)
+**Last updated:** 2026-06-05 (latency investigation CLOSED — finding #5 + same-day closure; P1+P2 complete; next: P3 acceptance Test 1)
 
 **What this doc is:** the living record of Phase 2 (packaging the Fork 2 reference
 into the 3-hour hackathon product). `PROGRESS.md` is the FROZEN Fork 2 build
@@ -34,7 +34,10 @@ docs/PACKAGING_BRIEF.md. RUN_OF_SHOW carries [___] timing cells and three
 
 **Next action: P3 — Patrick runs acceptance Test 1 (fresh-project presenter
 run: time every setup step, perform the opening out loud, restart-resilience
-pass), then Test 2 (the student run, tier budgets, peek log).**
+pass), then Test 2 (the student run, tier budgets, peek log).** The latency
+thread is fully CLOSED (finding #5 + closure); Test 1's 7_deploy_cloud.sh
+redeploy picks up the steered prompts on the engine — the only remaining
+latency-adjacent step.
 
 **Verify finding #3 (pre-demo check-in, 2026-06-05):** on the long-lived
 stack, verify reported "RaceState stale with the sim running — check
@@ -86,6 +89,77 @@ with Test 1's deploy. NEW SESSION button / session-age cap deferred. Operational
 now in RUN_OF_SHOW spirit: pre-flight ends RESTART-then-PAUSE, and LOOP on
 keeps a long-lived demo stack always verifiable.
 
+**Finding #5 (latency probe, 2026-06-05): CHAIN DEPTH is the structural
+cost; quota and session growth were both exonerated in a healthy window.**
+Instrumentation (qa1_telemetry.tar.gz): scripts/agent_chat.py gained
+per-event timing (`[+14.2s llm 9.8s]` — the gap before a tool call IS the
+LLM round incl. silent backoff), a per-turn summary line (wall / LLM calls /
+tool calls / prompt tokens / retry-log lines / max llm gap), an always-on
+retry/throttle log counter on google_genai+httpx, and a --debug-llm live
+stream; new scripts/qa_latency_probe.py automates the A/B protocol —
+each round asks fast/persistent, fused/persistent, and fast/FRESH (the
+control arm: constant-size request = pure quota-weather barometer).
+Measured, 5 rounds, reference agent, local InMemoryRunner: ZERO
+retry/throttle lines; control arm stable 4.0-5.3s (1.3× spread); the one
+honest fused research chain (round 1) cost 22.6s = 7 LLM calls + 6 tool
+calls at ~3.2s per LLM round. That IS the 20-40s band: ~7-call depth ×
+healthy per-call time ≈ 20s, × evening-contention per-call time (2-3×) ≈
+40-60s with timeouts as the failure tail — chain depth is the structure,
+quota weather is the multiplier, and the chunk-13 evening failures plus
+the morning recurrence are the same chain in different weather. H4
+falsified as a latency cause at session scale: prompt tokens grew
+6.3k→17.2k while persistent wall DROPPED 5.6s→2.8s. (Probe-design
+confound, noted for honesty: rounds 2-5 repeated the same questions, so
+the model answered fused asks from session history — 1 LLM call, 0 tools
+— meaning persistent-arm rounds 2+ measured recall, not research; round 1
+is the honest fused number, and it suffices.) Consequences: SLIDING
+WINDOW DEMOTED to hygiene — growth is real (~0.5-1.1k tok/question) and a
+deployed instance at 100+ questions is 60-100k+ replayed tokens of TPM
+burn per ask, which FEEDS quota contention (the surviving H4×H1
+interaction) — but the pre-flight bounce + self-heal patch already cover
+it operationally; don't build the window now. Perceived latency is
+already half-handled (the pit wall's "engineer is checking…" pending
+row); demo-day guidance becomes expectation-setting: a genuine fused
+question costs ~20s on a PERFECT day — pause the race and talk over it
+(fold into RUN_OF_SHOW with Test 1's numbers). Residue closed same day —
+see the closure below.
+
+**Finding #5 closure (chain audit + fixes, same day):** the --debug-llm
+audit of the demo's fused question decomposed the ~8-call chain: 4 of 8
+LLM rounds were an IDENTITY DETOUR — resolving "Cassidy" -> car 37 via
+list_tables -> guessed SQL (400 on invented column names; a
+discovery-first violation the model then self-corrected) ->
+get_table_info -> corrected SQL — because no curated tool maps a NAME to
+a car number, while get_field_am_status (every running car + driver
+code) was a 1-call resolver hiding in plain sight. **Fix 1**
+(qa2_name_steering_patch.py, applied + rm'd): one GIVEN rule added to
+DATA DISCIPLINE in BOTH agent packages — "Resolving driver names: call
+get_field_am_status; do NOT hunt the drivers table with execute_sql_bq."
+Verified live on a fresh 5× race (lap 8): the chain collapsed to **3 LLM
+calls / 4 tool calls / 11.3s** — better than the predicted 5-6 because
+Gemini PARALLELIZED once on the steered path (state + field-AM in one
+round, both energy curves in one round) — zero SQL detour, clean
+mid-race-delta answer in radio voice. **Fix 2**
+(qa3_qa_ceiling_patch.py, applied + rm'd): MAX_LLM_CALLS_PER_QA raised
+12 -> 30 with a QA_MAX_LLM_CALLS env override — Patrick's call: for
+HUMAN-initiated Q&A a slow-correct answer beats "Radio failure"
+mid-research (the audited legitimate chain hit 8 calls, so 12 was
+clippable in the wild). 30 is a circuit breaker (~90s at ~3s/call), not
+policy; not fully unbounded because the pit wall has no cancel button
+and a stuck ask would starve the trigger loop's shared quota — export
+QA_MAX_LLM_CALLS=500 (ADK's own default) when wanted. Triggers keep
+their hard 4; the deployed pit wall still clips Q&A on the ASK_TIMEOUT_S
+wall clock (env-overridable; 120 is a reasonable demo-day setting,
+though the steered chain makes 75 ample). NOTE: the deployed engine
+carries PRE-steering prompts until its next deploy — Test 1's
+7_deploy_cloud.sh picks them up; the demo expectation for the fused
+question revises to ~11-15s healthy, measured for RUN_OF_SHOW during
+Test 1. Side observation from the audit (no action): asked AT the
+chequered flag, the agent gave correct mid-race deltas but closed with
+"finished dead even on consumption" — the normalization artifact the
+doctrine warns about; the demo asks this question at the lap-3 pause,
+where the trap doesn't exist.
+
 ---
 
 ## Decisions locked (2026-06-05 planning session)
@@ -127,7 +201,7 @@ formula-e-race-engineer/
 ├── frontend/  shared/  state_writer/  toolbox/    # unchanged
 ├── deploy/                    # unchanged plumbing; setup/ wraps it
 ├── setup/                     # 1..6 + all.sh + verify.sh + 7_deploy_cloud.sh
-├── scripts/  notebooks/       # unchanged (imports updated for rename)
+├── scripts/  notebooks/       # unchanged (imports updated for rename; + qa_latency_probe.py, instrumented agent_chat.py)
 └── docs/PACKAGING_BRIEF.md    # marked SUPERSEDED by this doc
 ```
 
@@ -337,6 +411,10 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   **restart-resilience pass**: kill uvicorn mid-race and relaunch, RESTART the
   sim mid-Q&A, close/reopen the browser — the room will do all of these by
   accident in the first half hour; observations feed the troubleshooting table.
+  ALSO: time the demo's fused question on the deployed pit wall and put the
+  number in RUN_OF_SHOW's opening script (post-steering expectation ~11-15s
+  healthy — the 7_deploy_cloud.sh redeploy in THIS test is what puts the
+  steered prompts on the engine; the pending row covers the silence).
 - [ ] **Test 2 — student run.** Play student: load the starter, run tier by
   tier against the 40/45/30 budgets, checkpoint-demo exactly as STUDENT_GUIDE
   instructs. Discipline: don't peek at solution/ until genuinely stuck, and
@@ -398,7 +476,7 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   5x, 26 laps, local): summaries every 2-3 laps (floor is 2; the 3s are
   drops), 3 must-says, but only ONE event reaction — plausibly correct at
   5x (event density x5 vs fixed agent throughput => coalescing + drops)
-  but low enough to check; ties into the latency investigation (slow LLM
+  but low enough to check; ties into the latency findings (slow LLM
   calls starve the loop). Action: add fired/suppressed/dropped counters
   per type to the loop log, record baselines at 1x/2x/5x during Test 1,
   publish the table in RUN_OF_SHOW ("what healthy looks like") +
@@ -453,67 +531,38 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   launch box."
 - STAKEHOLDER DEMO (morning after the incident evening): DONE, well
   received — application, architecture, and event plan all landed. One
-  observed weakness: Q&A latency appeared AGAIN, in the MORNING — which
-  weakens time-of-day quota weather as the sole cause and raises the
-  priority of the structural suspects (chain depth, session growth).
-  This makes the latency investigation the top of the queue.
-- NEXT (priority 1, NEW conversation): **troubleshoot Q&A latency.** Even in local
-  mode (InMemoryRunner, agent_chat / local pit wall) the engineer sometimes
-  takes very long to answer. Hypotheses to test, in rough likelihood order:
-  (1) retry backoff absorbing 429s — shared_config retries up to 10 attempts,
-  exp backoff capped 8s + jitter, so a contended quota window can silently
-  add 30-60s per LLM call while looking like "thinking" (logs say gRPC code
-  8, never "429"); (2) long tool chains on fused questions —
-  MAX_LLM_CALLS_PER_QA=12 permits deep research loops, and each tool call =
-  a full LLM round trip + (for Toolbox tools) a network hop to fe-toolbox;
-  (3) the model wandering into schema discovery / execute_sql_bq when a
-  curated tool would have answered; (4) Q&A SESSION GROWTH compounding
-  with (1): the persistent session replays full history every question,
-  and bigger requests both run slower AND burn more tokens-per-minute
-  quota -> more 429s -> more backoff. (Can't explain trigger drops —
-  those are fresh sessions — but is a genuine Q&A multiplier.)
-  Candidate session-management fixes if measurement confirms (4), cheap
-  to rich: turn-cap rotation (recreate every N questions); SLIDING
-  WINDOW — fresh session per question + last 2-3 exchanges as preamble
-  (keeps follow-ups, caps growth — likely winner); or full
-  trigger-style: fresh session + snapshot + recent-exchange summary per
-  question (most consistent with the trigger design philosophy). Diagnostic plan: add per-step timing to
-  agent_chat (timestamp each tool call + each LLM gap), turn on genai client
-  retry logging to make backoff visible, time one known-fast question
-  (pure get_current_state) vs one fused question in the same minute —
-  separates quota weather from chain depth — and log per-Q&A (turn count,
-  input tokens, wall secs): latency climbing with turns = hypothesis 4
-  confirmed, build the sliding window; flat-but-spiky = quota weather,
-  build the progress indicator. TELEMETRY plan (do this first — it's free): (i) local: crank
-  google_genai + httpx loggers to DEBUG in agent_chat — the genai client
-  LOGS its retry attempts, so one slow question photographs the backoff
-  (429 -> growing gaps -> retry); (ii) richer: ADK's built-in
-  OpenTelemetry tracing / Cloud Trace on the engine side — span waterfall
-  per Q&A turns "took 40s" into "31s = two backoff stalls on calls 2+4";
-  (iii) keep the per-Q&A log line (turns, input tokens, wall secs).
-  SESSION-TECH research note: the deployed path ALREADY uses Agent Engine
-  managed sessions (that's what _new_session_sync creates) — and local
-  slowness reproduces under InMemoryRunner, so storage location is NOT
-  the cost; replayed TOKENS are. Managed session offload != faster.
-  Worth researching instead: Memory Bank-style managed extraction
-  (compact memories vs verbatim replay — the sliding-window idea as a
-  service), checking what ADK 1.x can reach vs 2.0-only. Possible
-  outcomes: sliding window (still favorite), an ASK-side progress
-  indicator ("checking history..."), tighter QA call ceiling, prompt
-  steering to curated tools. DEMO-DAY note: 40s silent answers are the
-  real cost — until fixed, mitigate theatrically (paused race so Q&A owns
-  the quota lane, talk over the gap, ask a warm-up question at T-5).
-  Fold findings into RUN_OF_SHOW troubleshooting.
+  observed weakness: Q&A latency appeared AGAIN, in the MORNING — now
+  EXPLAINED by finding #5: chain depth is structural (a fused question is
+  ~7 LLM rounds ≈ 20s even in perfect weather), so "slow fused answers in
+  the morning" required no quota anomaly at all.
+- **LATENCY (was priority 1) — CLOSED, see finding #5 + closure.** All
+  residue done: (a) chain audit complete — the wandering was a 4-round
+  identity detour (name -> car number), not open-ended research; (b)
+  steering rule shipped to BOTH agent packages and verified live: 8 LLM
+  calls / 26.1s -> 3 LLM calls / 11.3s on the demo question; (c) ceiling
+  decision: 30 + QA_MAX_LLM_CALLS env knob (Patrick: slow-correct beats
+  "Radio failure" for human-initiated Q&A); (d) RUN_OF_SHOW gets the
+  measured fused-question number during Test 1 (~11-15s expected
+  post-steering, AFTER 7_deploy_cloud.sh refreshes the engine's prompts).
+  Optional, non-blocking: an evening qa_latency_probe.py rerun to
+  photograph the quota multiplier — vary the question text per
+  round, or the persistent arm measures recall, not research (the round
+  2-5 confound). Sliding window / Memory-Bank research stays DROPPED
+  (hygiene covered by pre-flight bounce + self-heal patch); revisit only
+  if a future deployed instance must survive 100+ questions without a
+  bounce.
 - PARKED (post-demo, with the T2/T4 cascade): **BONUS.md bonus board** for
   fast finishers — additive-only, never carve features out of the given
   product (SIM bar is load-bearing for troubleshooting + demo). Structure:
   three areas, two tickets each, format = surface + spec + demo payoff, no
   solutions. UI: [S] Chirp HD voice picker (re-voice the engineer live);
   [M] live tool-call observability panel (ADK eventing lesson, makes the
-  clock bridge visible). AGENT: [M] post-race DEBRIEF button at the
-  chequered flag — agent writes the race story from history tools; [L]
-  re-cast the agent for another car (OUR_CAR_NUMBER + persona — Cassidy's
-  losing side of the same race; best wrap-demo payoff). VOICE & DATA: [S]
+  clock bridge visible — and, per finding #5, makes Q&A latency LEGIBLE:
+  the audience watches the research chain instead of waiting in silence).
+  AGENT: [M] post-race DEBRIEF button at the chequered flag — agent writes
+  the race story from history tools; [L] re-cast the agent for another car
+  (OUR_CAR_NUMBER + persona — Cassidy's losing side of the same race; best
+  wrap-demo payoff). VOICE & DATA: [S]
   Portuguese radio (Antonio's language — TTS locale + prompt rule); [M]
   mini eval harness (5 canned questions; assert no invented names, clean
   weather refusal). DEPLOY: [L]
@@ -527,7 +576,17 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   not their build; same for deploy_frontend's baked env. Alternates if any
   ticket dies: AM countdown timers on the tower, radio transcript log w/
   replay. The new-curated-Toolbox-tool idea stays in T4's menu, NOT on the
-  board (no double-listing).
+  board (no double-listing) — and the latency audit handed T4 its worked
+  example: **lookup_driver** (name/code -> car number + team + grid; one
+  bigquery-sql tool over drivers JOIN startgrid, equality match on
+  UPPER(driver_last_name) OR driver_short_name). The gap is real — the
+  reference's steering rule papers over it via get_field_am_status —
+  and students will feel it the first time they ask about a driver by
+  name, which makes it the ideal "add a curated Toolbox tool" exercise.
+  Cascade note if anyone builds it into the REFERENCE instead: 14 -> 15
+  tools touches verify_checks EXPECTED_TOOLS, toolbox_test.py, both
+  prompts' curated lists, and the "14 tools" mentions in README /
+  RUN_OF_SHOW / STUDENT_GUIDE.
   **Requires one GIVEN-product addition (ours, not a student ticket):
   FINISH RACE** — SIM-bar button + simulator /seek endpoint jumping the
   cursor to ~10s before the final frame, then playing out naturally so the
@@ -552,3 +611,8 @@ per chunk; after each update, Claude presents the latest version and Patrick
 overwrites his local `PACKAGING.md` in the repo. If this conversation ends
 abruptly, a fresh session reading this doc + the repo should know exactly
 where packaging stands and what's next.
+
+Command-box conventions now standing (2026-06-05): one-shot patch scripts
+end their run box with the `rm` cleanup command (run it, then remove it);
+tests needing fresh race data start with the sim-refresh block — set sim
+speed 5×, POST /restart, sleep ~30s — before the test command.

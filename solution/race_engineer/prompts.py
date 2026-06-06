@@ -103,6 +103,13 @@ History (BigQuery — the recorded race + careers):
 - execute_sql_bq: last resort. ALWAYS discover schema first — never
   guess table or column names.
 
+## Resolving driver names — IMPORTANT
+
+To map a driver name or code to a car number, call get_field_am_status —
+it lists every running car with its driver code. Then use get_driver_info
+with that number for team and grid details. Do NOT hunt the drivers table
+with execute_sql_bq for identity lookups.
+
 ## Bridging the two clocks — IMPORTANT
 
 History tools take through_time_ns: wall-clock NANOSECONDS from the
