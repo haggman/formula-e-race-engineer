@@ -3,8 +3,9 @@
 # WHERE: Cloud Shell, repo root, after `source activate.sh`
 # WHAT:  bash setup/all.sh
 #
-# Wall clock: ~20-30 minutes (Firestore index builds decide). Idempotent:
-# safe to rerun after a failure — completed steps fast-forward.
+# Wall clock: budget 20 minutes, ~10 typical on a fresh project (Firestore
+# index builds are the one variable). Idempotent: safe to rerun after a
+# failure — completed steps fast-forward.
 #
 # What this does NOT do: deploy Agent Engine or the Cloud Run frontend.
 # Those are the optional instructor extras: bash setup/7_deploy_cloud.sh

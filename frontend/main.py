@@ -20,6 +20,7 @@ import contextlib
 import json
 import logging
 import os
+import time
 from pathlib import Path
 
 import httpx
@@ -202,10 +203,13 @@ async def index() -> FileResponse:
 
 async def _handle_ask(question: str) -> None:
     stamp = {"race_time_s": latest["race_time_s"], "lap": latest["lap"]}
+    t0 = time.monotonic()
     try:
         answer = await engineer.ask(question)
         await radio_broadcast({"type": "radio", "kind": "qa",
-                               "text": answer, **stamp})
+                               "text": answer,
+                               "secs": round(time.monotonic() - t0, 1),
+                               **stamp})
     except Exception as e:
         logger.warning("qa failed: %s", str(e).splitlines()[0][:160])
         await radio_broadcast({"type": "radio", "kind": "qa",

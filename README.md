@@ -23,7 +23,7 @@ trigger system, and build the agent in the middle.
 
 ```bash
 source activate.sh        # venv + env (run in every new Cloud Shell tab)
-bash setup/all.sh         # deploy the full data plane (~20-30 min) + verify
+bash setup/all.sh         # deploy the full data plane (budget 20 min, ~10 typical) + verify
 ```
 
 Optional instructor extras (Agent Engine + public Cloud Run pit wall):
@@ -38,7 +38,7 @@ Optional instructor extras (Agent Engine + public Cloud Run pit wall):
         └── invokes → [ADK Race Engineer agent: gemini-3.5-flash]
                           ├── frame tools → Firestore (the live "now")
                           └── MCP Toolbox → BigQuery  (the recorded "then":
-                              14 curated tools + schema discovery + SQL)
+                              14 tools: 11 curated + discovery + SQL)
 ```
 
 The agent runs in-process during development (`AGENT_MODE=local`) or on

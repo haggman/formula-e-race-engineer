@@ -247,7 +247,7 @@ function renderState(msg) {
     row.innerHTML =
       `<span class="pos">P${c.position}</span>` +
       `<span class="num">#${c.car}</span>` +
-      `<span class="drv" title="${(DRIVERS[c.driver] || {}).full || ""}">${(DRIVERS[c.driver] || {}).last || c.driver || "—"}</span>` +
+      `<span class="drv">${(DRIVERS[c.driver] || {}).last || c.driver || "—"}</span>` +
       `<span class="ambadge${c.am_active ? " on" : ""}">AM</span>` +
       `<span class="pips">${"●".repeat(c.am_used)}${"○".repeat(Math.max(0, 2 - c.am_used))}</span>`;
     tower.appendChild(row);
@@ -353,7 +353,8 @@ function addRadioCall(msg) {
     `<div class="meta">${who}${fmtClock(msg.race_time_s)} · lap ${msg.lap}` +
     (msg.kind && msg.kind !== "qa" && msg.kind !== "question"
       ? ` · <span class="tag">${msg.kind}</span>` : "") +
-    (msg.secs != null ? ` · ${msg.secs}s · ${msg.tools} tool${msg.tools === 1 ? "" : "s"}` : "") +
+    (msg.secs != null ? ` · ${msg.secs}s` : "") +
+    (msg.tools != null ? ` · ${msg.tools} tool${msg.tools === 1 ? "" : "s"}` : "") +
     `</div><div class="text">${msg.text}</div>`;
   const log = $("radiolog");
   log.insertBefore(div, pending);

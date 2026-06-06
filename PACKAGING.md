@@ -136,14 +136,15 @@ rows summarized to outcomes; full history in git and the planning hub.
 
 ## P2.7 — next cascade (small, batched for one patch)
 
-- [ ] index.html: REMOVE the surname tooltip (`title` attr) — dead on
+- [x] index.html: REMOVE the surname tooltip (`title` attr) — dead on
   arrival: the tower rebuilds via innerHTML at 1 Hz, so the element never
   survives the hover delay. Surname itself works; tooltip is noise.
-- [ ] main.py: optional — stamp Q&A answers with wall secs (`_handle_ask`
+- [x] main.py: optional — stamp Q&A answers with wall secs (`_handle_ask`
   timing); tool count not cheaply available on the ask path. Patrick to
   confirm want.
-- [ ] README.md + setup/all.sh header + STUDENT_GUIDE.md: revise the
+- [x] README.md + setup/all.sh header + STUDENT_GUIDE.md: revise the
   "~20-30 min" setup claims to "budget 20, ~10 typical" (Finding #8).
+  (Done — README + all.sh patched; STUDENT_GUIDE carried no such claim.)
 - [ ] activate.sh nicety (optional): warn if `deploy/.engine_resource`
   refers to a different project than PROJECT_ID (stale-file confusion
   guard for long-lived clones).

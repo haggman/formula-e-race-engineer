@@ -93,7 +93,7 @@ ground truth for the patterns this repo uses.
 - API reference: https://google.github.io/adk-docs/api-reference/python/
   — it now defaults to 2.0.0; trust the repo's worked example when they
   disagree.
-- MCP Toolbox: https://googleapis.github.io/genai-toolbox/ — our server
+- MCP Toolbox: https://mcp-toolbox.dev/documentation/introduction/ — our server
   runs v1.3.0 and the current docs describe the newer v2 config format,
   so when you touch `toolbox/tools.yaml`, copy the shape of the
   EXISTING tools in the file, not the docs.
