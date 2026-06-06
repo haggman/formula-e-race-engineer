@@ -451,7 +451,13 @@ All scripts non-interactive (`--yes` semantics throughout); the only existing
   no rememberable parts. RUN_OF_SHOW troubleshooting table gets the row:
   "everything 503s locally -> your session lost its env; re-run the
   launch box."
-- PARKED (post-demo): **troubleshoot LOCAL Q&A latency.** Even in local
+- STAKEHOLDER DEMO (morning after the incident evening): DONE, well
+  received — application, architecture, and event plan all landed. One
+  observed weakness: Q&A latency appeared AGAIN, in the MORNING — which
+  weakens time-of-day quota weather as the sole cause and raises the
+  priority of the structural suspects (chain depth, session growth).
+  This makes the latency investigation the top of the queue.
+- NEXT (priority 1, NEW conversation): **troubleshoot Q&A latency.** Even in local
   mode (InMemoryRunner, agent_chat / local pit wall) the engineer sometimes
   takes very long to answer. Hypotheses to test, in rough likelihood order:
   (1) retry backoff absorbing 429s — shared_config retries up to 10 attempts,
