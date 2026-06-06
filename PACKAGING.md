@@ -1,152 +1,185 @@
-# PACKAGING.md — Phase 2.5 (cascade executed, v2)
+# PACKAGING.md — Phase 2.6 (fresh-project validation + DSQ re-baseline, v1)
 
-Last updated: 2026-06-06 (P2.5 v2: cascade re-verified against the live repo
-at `5de4855` incl. the RECOVERED student guide; all 37 edits exact-anchored;
-regression green in a clean clone — pending apply + commit). P1 (restructure
-+ scripts) and P2 (docs) COMPLETE. Latency thread CLOSED. Note: P1/P2 detail
-rows in this revision are summarized to their outcomes; full history lives in
-git and the planning hub.
+Last updated: 2026-06-06 evening (P2.6: two virgin-project installs
+validated, Finding #7 re-baselined and CLOSED, Findings #8/#9 opened and
+closed same-day; all fixes pushed to main). P1/P2/P2.5 COMPLETE — detail
+rows summarized to outcomes; full history in git and the planning hub.
 
 ---
 
 ## Current state
 
-- **P1 ✓** — repo restructured around the `AGENT_PACKAGE` seam
-  (starter/solution mirror shape); scripts re-homed; engine-app build
-  self-checks (stale-import hunt matches imports only; `agent_pkg.py` stays
-  client-side).
-- **P2 ✓** — docs delivered (DEMO.md, RUN_OF_SHOW.md, STUDENT_GUIDE.md —
-  but see Finding #6).
-- **Latency thread CLOSED** — Finding #5: chain depth is structural;
-  name-steering fix shipped; QA ceiling raised 12 → 30 via
-  `QA_MAX_LLM_CALLS`. Optional evening `qa_latency_probe` rerun stays parked.
-- **P2.5 ✓ (this delivery)** — parked cascade items executed; see below.
+- **P1 ✓ / P2 ✓ / P2.5 ✓** — repo restructured on the `AGENT_PACKAGE`
+  seam; docs delivered; cascade executed (37 edits, committed `5de4855`+).
+- **P2.6 ✓ (this delivery)** — fresh-install validation GREEN on two
+  consecutive virgin Qwiklabs projects; fresh-project hardening shipped
+  (Finding #8); Q&A freshness rule shipped (Finding #9); Finding #7
+  re-baselined with zero-throttle scoreboards and a TESTED model escape;
+  UI polish (surname tower, call-meta secs/tools). All pushed.
+- **Remaining before the event:** Test 1 rehearsal items (opening script
+  timing, lap-2 drop point, step-7 timing cell, 2×/1× baseline rows) +
+  Test 2 docs voice pass + the P2.7 cascade list below.
 
 ## Findings log
 
-- **#5 (latency, CLOSED):** QA latency is chain-depth, not transport.
-  Structural; mitigated by name-steering in the prompt + raised call ceiling.
-  Future structural fix = `lookup_driver` curated tool (now a T4 exercise in
-  the student guide — deliberately NOT shipped in tools.yaml).
-- **#6 (RESOLVED — STUDENT_GUIDE.md clobbered):** the repo file named
-  `STUDENT_GUIDE.md` contained a stale PACKAGING.md snapshot (P1.6-era
-  header) — the correct version was likely never committed. **Resolution:**
-  Patrick recovered the delivered guide from the chat where it was created
-  and pushed it (commit `5de4855`). The recovered text is canonical; the
-  cascade guide items (primer expansion, Code Assist + ADK links, lane map)
-  ship as **targeted patch edits to it**, not a rewrite. Test 2 reviews the
-  new sections in context.
-- **#7 (NEW — DSQ 429s; first scoreboard run):** logging fix surfaced heavy
-  429s. Diagnosis: `X-Vertex-AI-LLM-Request-Type: shared` on the `global`
-  endpoint = **Dynamic Shared Quota** — POOL capacity, not project quota
-  (quota console correctly shows nothing near a limit). Aggravated by TWO
-  engineers on one pool (deployed fe-frontend + local) at 5×. Q&A >1 min
-  = retry math: attempts=10 / max_delay=8s ≈ 47s of backoff per bad LLM
-  step. Mitigations shipped: retry attempts 10→4 + max_delay 4s (the
-  loop's fresh-snapshot retry beats SDK grinding), FE_MODEL env knob
-  (regional GA escape documented), `throttled:<kind>` counter. First 5×
-  scoreboard — **PROVISIONAL, dual-engineer + throttled; re-baseline in
-  the fresh project**: fired:event 1, fired:lap_summary 11,
-  dropped:lap_summary 2, dropped:must_say 1, expired:must_say 1,
-  suppressed 19. Headline damage: ZERO must_says fired vs ~3 expected.
+- **#5 (latency, CLOSED):** chain-depth structural; name-steering +
+  QA_MAX_LLM_CALLS shipped. `lookup_driver` remains a T4 exercise.
+- **#6 (RESOLVED):** STUDENT_GUIDE.md recovered + patched; canonical.
+- **#7 (DSQ 429s — RE-BASELINED, CLOSED 2026-06-06):**
+  - **Re-baseline (fresh RESOURCED Qwiklabs project, single engineer,
+    post-mitigations):** full 41-lap 5× race, `gemini-3.5-flash` @ global
+    + shared header: **ZERO SDK retry lines in the whole log**, zero
+    dropped/throttled/expired, **5/5 must-says fired** (1 event, 16
+    summaries, 34 suppressed). The provisional dual-engineer scoreboard
+    (0 must-says) is superseded.
+  - **Variable isolation:** same model/endpoint/header as the morning
+    storms → the project TYPE (resourced lab project) is the variable,
+    not the mitigations alone (though attempts-4/max-delay-4 also
+    shortened recovery in the afternoon standard-project run: 2 of 3
+    must-says delivered vs 0). RECOMMENDATION: provision the event on
+    the resourced project type.
+  - **Escape ladder (tested top rung):** (1) `FE_MODEL=gemini-3.1-flash-lite`
+    — TESTED at 5×, full race: zero retries, 5/5 must-says, MORE
+    responsive (7 events / 21 summaries / 53 suppressed — faster calls =
+    loop clears debounce sooner), quality gates held (must-say durations
+    correct, fused question correct, weather honesty refusal clean,
+    persona held). Stable model ID since the preview's 2026-07-09
+    discontinuation; cheaper and faster than 2.5/3.5 Flash. (2)
+    `FE_MODEL=gemini-2.5-flash GOOGLE_CLOUD_LOCATION=us-central1` —
+    regional GA, visible/raisable quota; NOTE 2.5 models retire
+    2026-10-16, so this rung has a shelf life. (3) Drop the
+    `X-Vertex-AI-LLM-Request-Type: shared` header (opts out of the DSQ
+    pool) — documented, untested, break-glass only. Non-Gemini models
+    (Claude on Vertex via LiteLLM) evaluated and REJECTED for this event:
+    Google hackathon optics + code-path change; noted for other contexts.
+  - Default stays `gemini-3.5-flash` (carries the chunk-8 fact-check
+    validation). Lite is the documented first escape; a graded fact-check
+    pass would be required before promoting it to default.
+- **#8 (NEW, CLOSED — fresh-project hardening):** first-ever virgin-project
+  install surfaced five issues, all fixed + validated on a second virgin
+  project (clean unattended GREEN, 7m18s):
+  - **IAM propagation race:** create-SA-then-grant dies with "Service
+    account ... does not exist" seconds after successful creation. Fix:
+    retry loop (6×10s) around project-level grants in deploy_toolbox /
+    deploy_state_writer / deploy_frontend. (Distinct from the chunk-12
+    Agent Engine pattern — there the SA doesn't EXIST until deploy, so
+    reordering was the fix; here it exists but hasn't propagated, so
+    waiting is.)
+  - **Hidden interactive prompt:** `gcloud run deploy --source` asks Y/n
+    to create its Artifact Registry repo on first use — stalls unattended
+    `setup/all.sh` and DIES on prompt timeout under `set -e` (observed).
+    Fix: `--quiet` in simulator/deploy.sh. Highest-severity find of the
+    session for the hackathon room.
+  - **Silent multi-minute activation stall:** activate.sh's TOOLBOX_URL
+    discovery (first gcloud API call on a project with Cloud Run API not
+    yet enabled) hung silently ~5 min. Fix: `timeout 10` + heartbeat echo.
+    Validated: second fresh project activated fast.
+  - **GOOGLE_CLOUD_LOCATION clobber:** activate.sh unconditionally
+    exported `global`, silently defeating the documented regional escape
+    (demo.sh sources activate.sh). Fix: env-respecting default.
+  - **Doomed cross-project bucket grant:** simulator/deploy.sh tried to
+    bind IAM on gs://class-demo (now public-read); students lack
+    getIamPolicy → caught-but-scary red ERROR. Fix: removed, replaced
+    with an explanatory echo.
+  - Also: `deploy/.engine_resource` untracked + gitignored (committed
+    copy pointed every fresh clone at a dead project's engine).
+  - **Measured fresh-install timings** (canonical, in RUN_OF_SHOW): 10s /
+    55s / 48s / 12s / 155s / 88s / verify ~70s = **7m 18s total** (prior
+    fresh run: 5m 34s). The advertised "~20-30 min" is now "budget 20,
+    ~10 typical" — README/all.sh/STUDENT_GUIDE claims need the same edit
+    (P2.7 list). Choreography upside: student setups go green BEFORE the
+    opening demo ends.
+- **#9 (NEW, CLOSED — Q&A staleness):** pit-wall answer to "how is our
+  energy remaining?" reported lap-26-era cumulative CONSUMPTION (64.1%)
+  while the live gauge read ~teens REMAINING. Three stacked causes:
+  wrong tool family (get_energy_curve = normalized consumption history,
+  a different instrument than get_current_state's live battery), stale
+  through_lap, and the persistent Q&A session legitimizing old tool
+  responses ("a tool response in this conversation" includes one from
+  minutes of race-time ago). **Fresh-session control via agent_chat
+  behaved CORRECTLY** (get_current_state first, right lap, right answer)
+  — isolating the persistent session as the trigger. Fix: FRESHNESS
+  subsection in the GIVEN data-discipline block (both packages):
+  per-question state re-fetch; "remaining" answered from
+  energy_pct_remaining only; energy_curve restricted to rival/field
+  comparisons. Validated live post-fix (both phrasings correct at the
+  pit wall). Bonus mechanism note: failed ADK runs are NOT rolled back —
+  partial tool results persist in the session, so consecutive failed
+  retries of one question accidentally checkpoint their way to an
+  answer. Teachable.
 
 ## Decisions (additions this phase)
 
 | Decision | Rationale |
 |---|---|
-| `DEPLOY_AGENT_PACKAGE` is its **own** env knob (default `solution.race_engineer`), not activate.sh's `AGENT_PACKAGE` | activate.sh defaults `AGENT_PACKAGE=starter` for local dev; inheriting it in the deploy path would silently ship stubs as the reference. Consequence: `setup/7_deploy_cloud.sh` needs **no change**. |
-| FINISH implemented server-side as `/api/sim/finish` (`/status` → `race_time_s + seconds_remaining − 10` → POST `/jump`), registered **before** the `{action}` catch-all | Keeps `/jump` itself OFF the generic proxy whitelist (prior decision preserved); FastAPI matches routes in registration order. NOTE: `/status` exposes **no end_tick** — caught against simulator source; `/jump` clamps to the valid range. Forward jumps are safe: restart detection only fires on backwards time. |
-| Scoreboard = `Counter` in the engineer loop: `fired:<kind>` / `dropped:<kind>` / `suppressed` / `expired:must_say`; logged every ~120s; dumped + cleared on replay restart | Per-race baselines with zero new infrastructure; Q&A deliberately uncounted (human-initiated). `suppressed` counts over-threshold-inside-debounce — the gate visibly earning its keep. |
-| `demo.sh` = the only blessed local launch (`RUN_SOLUTION=1` pins the reference); frontend hard-fails at startup if local mode has no `SIM_URL` | Universal-503s incident hardening: recycled Cloud Shell sessions drop exports. Fail loudly with the exact fix, never limp. |
-| Dockerfile copies `starter/` alongside `solution/` | Either `AGENT_PACKAGE` must resolve in-container for the bonus deploy path; harmless to the instructor flow. |
-| `lookup_driver` lives in the student guide T4 menu, **not** on the BONUS board | No double-listing; it's a teaching exercise (verify.sh's 14-tool expectation flags the 15th — documented as expected in the guide). |
-| `FE_MODEL` env knob (default `gemini-3.5-flash`); SDK retry attempts 4 / max_delay 4s | Different models = different DSQ pools; the sustained-429 escape is a regional GA flip (`gemini-2.5-flash` @ us-central1, visible/raisable quota). The trigger loop owns retry semantics (fresh snapshot, 5s cooldown, must-say TTL) — deep SDK backoff just shipped stale prompts late. |
+| Event projects: use the resourced Qwiklabs project type | Finding #7 re-baseline: zero 429 retries across two full 5× races vs same-day storms on the standard type. Single strongest lever found. |
+| Model escape ladder documented in RUN_OF_SHOW; `gemini-3.1-flash-lite` is the tested first rung; default stays `gemini-3.5-flash` | Lite passed the live quality audit but not the graded chunk-8 fact-check; defaults change on grades, not vibes. 2.5-flash demoted to second rung (retires 2026-10-16). |
+| Tower shows driver SURNAMES (BQ-generated map baked into index.html), not 3-letter codes | Matches what the radio voice says; closes the audience name-mapping gap. Map generated from fe_race10.drivers at patch time — never hand-typed (the repo's own anti-hallucination lesson). |
+| Radio meta line shows `secs · tools` per proactive call | Already in every payload; one-line render. Audience-visible orchestration texture WITHOUT cannibalizing the BONUS.md observability-panel ticket (that ticket streams live tool EVENTS — still distinct). |
+| Patch-file conventions (workflow): patch scripts land in the REPO ROOT (Cloud Shell editor can't edit outside $HOME), are cumulative + skip-if-applied, and get rm'd after | Two-clone reality: a cumulative patch is safe on both the patched clone and a fresh one; /tmp staging is unusable in Patrick's editor. |
 
-## P2.5 — cascade execution (this delivery)
+## P2.6 — delivered (all pushed to main)
 
-Delivered files:
-
-- [x] `STUDENT_GUIDE.md` — NOT delivered as a file (Finding #6 resolved: the
-  recovered guide is canonical). The cascade items land as nine targeted
-  patch edits instead: Code Assist tip + ADK 2.0 warning + curated
-  ADK/Toolbox links (verified 2026-06-06; Toolbox docs describe v2 config,
-  server runs v1.3.0 → "copy existing tools.yaml shapes" guidance); primer
-  additions (Turn 2 activation zone, laps 7–9 attack-loop sacrifice, GUE/FEN
-  retirements); T3 test surface → `bash demo.sh`; T4 lookup_driver exercise
-  (with the verify.sh 14-tool caveat, redeploy via `setup/3_deploy_toolbox.sh`);
-  team lane map table + integration ritual; local-503s troubleshooting row;
-  BONUS.md pointer.
-- [x] `BONUS.md` — additive board: UI ([S] voice picker, [M] tool-call
-  panel), AGENT ([M] DEBRIEF pairing with FINISH, [L] re-cast as Cassidy
-  #37), VOICE&DATA ([S] Portuguese radio, [M] mini eval harness), DEPLOY
-  ([L] ship YOUR agent via DEPLOY_AGENT_PACKAGE); alternates (AM countdowns,
-  transcript replay).
-- [x] `demo.sh` — zero-rememberable-parts local launch.
-- [x] `cascade_patch.py` v2 — one-shot, ALL edits assert-guarded with exact
-  anchors verified against the live repo (`5de4855`). Run once from repo
-  root, then `rm`. Verified in a clean clone: 37/37 edits, compileall +
-  bash -n green, both build_engine_app paths (reference + DEPLOY_AGENT_PACKAGE
-  =starter) stage and self-check, route order confirmed.
+- [x] `fresh_project_patch2.py` (cumulative, run + removed) — Finding #8
+  fixes across activate.sh, 3× deploy scripts, simulator/deploy.sh.
+- [x] `pre_push_patch.py` (run + removed) — Finding #9 freshness rule in
+  solution+starter prompts.py; index.html surname map + meta enrichment.
+- [x] `.engine_resource` untracked; .gitignore updated.
+- [x] Fresh-project validation #1 (standard type): exposed #8, then GREEN.
+- [x] Fresh-project validation #2 (resourced type, all fixes from clone):
+  unattended GREEN 7m18s, zero patch files — the true student path.
+- [x] DSQ re-baseline + model-escape test (Finding #7 closure data).
+- [x] RUN_OF_SHOW.md updated (this drop): timing cells, 5× baselines both
+  models, three VERIFIED troubleshooting rows, revised time claims, DSQ
+  fix row rewritten around the tested ladder, new IAM-retry row.
 - [x] This PACKAGING.md update.
 
-Code edits in the patch:
+## P2.7 — next cascade (small, batched for one patch)
 
-- [x] `frontend/engineer_loop.py` — scoreboard (8 edits).
-- [x] `frontend/main.py` — SIM_URL local-mode startup guard;
-  `/api/sim/finish`.
-- [x] `frontend/static/index.html` — FINISH button + handler.
-- [x] `frontend/Dockerfile` — `COPY starter/`.
-- [x] `deploy/build_engine_app.py` — DEPLOY_AGENT_PACKAGE knob, parameterized
-  REWRITE_RE/STALE_IMPORT_RE, PKG_PATH guard, source-package print, docstring.
-- [x] `deploy/deploy_frontend.sh` — DEPLOY_AGENT_PACKAGE default + banner +
-  `AGENT_PACKAGE` in `--set-env-vars`.
-- [x] `RUN_OF_SHOW.md` — 503s-locally troubleshooting row; lane-map talking
-  point (13:00–18:00); fallback → `RUN_SOLUTION=1 bash demo.sh`; FINISH
-  note in pre-flight; "What healthy looks like" section (taxonomy table +
-  1×/2×/5× baseline cells) before Open items; baseline checklist item.
-- [x] `DEMO.md` — demo.sh pointer in the run block.
+- [ ] index.html: REMOVE the surname tooltip (`title` attr) — dead on
+  arrival: the tower rebuilds via innerHTML at 1 Hz, so the element never
+  survives the hover delay. Surname itself works; tooltip is noise.
+- [ ] main.py: optional — stamp Q&A answers with wall secs (`_handle_ask`
+  timing); tool count not cheaply available on the ask path. Patrick to
+  confirm want.
+- [ ] README.md + setup/all.sh header + STUDENT_GUIDE.md: revise the
+  "~20-30 min" setup claims to "budget 20, ~10 typical" (Finding #8).
+- [ ] activate.sh nicety (optional): warn if `deploy/.engine_resource`
+  refers to a different project than PROJECT_ID (stale-file confusion
+  guard for long-lived clones).
 
-Pending (Patrick, at the machine):
+## P3 — acceptance tests (status)
 
-- [ ] Apply cascade (`apply_cascade.sh`), skim the STUDENT_GUIDE diff, run
-  the live smoke, commit. (Static regression already verified in a clean
-  clone of `5de4855`.)
+**Test 1 (full local run):** scoreboard baselines — 5× DONE both models
+(see RUN_OF_SHOW); 2×/1× rows + step-7 timing cell + opening-script
+timing + lap-2 drop point → capture at the run-of-show rehearsal (those
+speeds get run then anyway). FINISH sanity-poked earlier (P2.5 run).
+Three robustness rows VERIFIED (kill-uvicorn, RESTART mid-race, browser
+bounce). Q&A spread exercised incl. the Finding #9 regression check.
 
-## P3 — acceptance tests
-
-**Test 1 (full local run):**
-- [ ] Record scoreboard baselines at **1× / 2× / 5×** into the RUN_OF_SHOW
-  table (prior 5× eyeball: summaries every 2–3 laps, ~3 must-says, ONE event
-  reaction).
-- [ ] Sanity-poke FINISH (jump lands ~10s before flag; loop treats it as a
-  forward jump, no restart flush; event-log gap is per-spec).
-- [ ] Confirm `7_deploy_cloud.sh` picks up the steered prompts; fused
-  question on the deployed engine ~11–15s expected.
-- [ ] Standard pass: T1/T2 validators, demo.sh audio unlock, Q&A spread.
-
-**Test 2 (docs voice pass):**
-- [ ] STUDENT_GUIDE.md — review the nine NEW sections in context (voice
-  match against the recovered base; link spot-check). Base text is the
-  recovered original and needs no re-review.
-- [ ] GIVEN-banner prose sanity check (drafted P1.4).
-- [ ] BONUS.md ticket sanity (surfaces exist, sizes honest).
+**Test 2 (docs voice pass):** unchanged — STUDENT_GUIDE nine new sections
+in context, GIVEN-banner prose, BONUS ticket sanity. Plus: this drop's
+RUN_OF_SHOW edits get a skim in the same pass.
 
 ## Open items — KEEP PARKED
 
-- [ ] **URGENT when back at the machine:** all-backends-503 triage protocol
-  (needs the live project; distinct from the *local* 503s now hardened by
-  demo.sh).
-- [ ] Qwiklabs template observation (carry-over).
-- [ ] Optional: evening `qa_latency_probe` rerun post name-steering.
+- [ ] All-backends-503 triage protocol (needs a live deployed stack —
+  pairs naturally with the step-7 rehearsal).
+- [ ] Qwiklabs template observation (carry-over) — NOTE: the resourced
+  project type recommendation (Finding #7) feeds directly into this.
+- [ ] Optional: evening `qa_latency_probe` rerun — arguably moot on the
+  resourced project type (zero retries); keep parked, revisit only if
+  rehearsal latency disappoints.
 
-## Target repo layout (delta)
+## Target repo layout (delta this phase)
 
 ```
 formula-e-race-engineer/
-  demo.sh                 ← NEW (blessed local launch)
-  STUDENT_GUIDE.md        ← recovered base + 9 patch edits (Finding #6)
-  BONUS.md                ← NEW
-  PACKAGING.md            ← this file
-  DEMO.md, RUN_OF_SHOW.md ← patched
-  frontend/  deploy/      ← patched per P2.5 list above
+  activate.sh               ← hardened (timeout, env-respecting location)
+  deploy/deploy_*.sh        ← IAM grant retry (3 files)
+  deploy/.engine_resource   ← UNTRACKED (gitignored; per-project artifact)
+  simulator/deploy.sh       ← --quiet; bucket grant removed
+  solution|starter/.../prompts.py ← FRESHNESS rule (GIVEN section)
+  frontend/static/index.html ← surname tower, meta secs·tools
+  RUN_OF_SHOW.md, PACKAGING.md ← this drop
 ```
