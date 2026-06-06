@@ -58,7 +58,7 @@ fi
 # --- Vertex AI / ADK ---
 export GOOGLE_GENAI_USE_VERTEXAI=1
 export GOOGLE_CLOUD_PROJECT="$PROJECT_ID"
-export GOOGLE_CLOUD_LOCATION=global
+export GOOGLE_CLOUD_LOCATION="${GOOGLE_CLOUD_LOCATION:-global}"
 
 # --- MCP Toolbox URL (auto-discovered from Cloud Run) ---
 export TOOLBOX_URL="${TOOLBOX_URL:-$(gcloud run services describe fe-toolbox --region "$REGION" --format='value(status.url)' 2>/dev/null)}"
