@@ -48,6 +48,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import threading
 import time
 import uuid
 
@@ -180,12 +181,37 @@ class EngineAgentClient:
         self.app = agent_engines.get(resource)
         self.resource = resource
         self._qa_session_id: str | None = None
+        # One-slot session prefetch for trigger fires: create_session is
+        # a control-plane round trip that was sitting INSIDE every fire's
+        # latency. Keep one fresh session ready; refill in the background
+        # while each query runs. Semantics unchanged — every trigger
+        # still gets a session with zero history.
+        self._next_session: str | None = None
+        self._prefetch_lock = threading.Lock()
+        threading.Thread(target=self._prefetch_next, daemon=True).start()
 
     # ---- sync internals (run inside asyncio.to_thread) ----
 
     def _new_session_sync(self) -> str:
         session = self.app.create_session(user_id=USER_ID)
         return session["id"] if isinstance(session, dict) else session.id
+
+    def _take_or_create_session(self) -> str:
+        """Pop the prefetched session; fall back to a synchronous create
+        (prefetch failed, or two fires raced for the slot)."""
+        with self._prefetch_lock:
+            sid, self._next_session = self._next_session, None
+        return sid or self._new_session_sync()
+
+    def _prefetch_next(self) -> None:
+        """Refill the slot. Best-effort: on failure the next fire simply
+        creates synchronously — never worse than the pre-prefetch path."""
+        try:
+            sid = self._new_session_sync()
+        except Exception:
+            return
+        with self._prefetch_lock:
+            self._next_session = sid
 
     def _query_sync(self, session_id: str, message: str) -> tuple[str, int]:
         """Consume one query's event stream; return (text, tool_call_count).
@@ -236,7 +262,10 @@ class EngineAgentClient:
         t0 = time.monotonic()
 
         def _go() -> tuple[str, int]:
-            session_id = self._new_session_sync()
+            session_id = self._take_or_create_session()
+            # refill the slot WHILE the query runs — creation overlaps
+            # model work instead of preceding it
+            threading.Thread(target=self._prefetch_next, daemon=True).start()
             return self._query_sync(session_id, prompt)
 
         text, tools = await asyncio.wait_for(

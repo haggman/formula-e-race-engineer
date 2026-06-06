@@ -44,6 +44,8 @@ runs far past its number, it's stalled, not slow):
 - [ ] Grant mic permission NOW (hold the 🎤, say "test", see the
       transcript land). Browser permission prompts mid-demo kill momentum.
 - [ ] SIM bar: speed 2×, LOOP off, then RESTART and confirm calls flow.
+      FINISH jumps to ~10s before the flag — the fast path to
+      end-of-race states for rehearsal.
 - [ ] PAUSE the sim. Leave it paused on the grid until showtime.
 - [ ] `python scripts/engine_smoke.py` → both worlds answer.
 - [ ] Bounce fe-frontend for a FRESH Q&A session (the persistent session
@@ -54,9 +56,9 @@ runs far past its number, it's stalled, not slow):
       whiteboard: clone URL, `source activate.sh`, `bash setup/all.sh`.
 
 Fallback if you skipped step 7 (or the engine misbehaves): the identical
-demo runs locally — `export SIM_URL=...; uvicorn frontend.main:app --host
-0.0.0.0 --port 8080` with Web Preview. Same UI, same agent behavior,
-AGENT_PACKAGE=solution via your shell.
+demo runs locally — `RUN_SOLUTION=1 bash demo.sh` with Web Preview on
+8080. Zero rememberable parts: it sources activate.sh, derives SIM_URL,
+and pins the reference agent itself. Same UI, same agent behavior.
 
 ---
 
@@ -107,7 +109,9 @@ teaches.
 toolbox 45 / T3 persona 30 / T4 triggers as stretch), one testing surface
 per tier, checkpoints. State the answer-key policy out loud: `solution/`
 is open, same filenames, reading it when stuck is encouraged. Teams: four
-lanes (tools / data / persona / triggers), one integration point. Glance
+lanes, four test scripts, nobody waits on anybody (tools / data /
+persona / triggers), one integration point — point the room at the lane
+map table in STUDENT_GUIDE.md. Glance
 at a student screen — setup should be around step 4–5; reassure that
 verify at the end is their green light.
 
@@ -160,17 +164,51 @@ tool. Then point at the seven-challenge arc.
 | Student setup stalled at step N | Compare against the timing table above | Idempotent: Ctrl-C and rerun `setup/all.sh`; it fast-forwards |
 | verify ✗ on indexes "still building" | Firestore backend queue | Genuinely just wait; re-run verify. No action exists. |
 | Tower empty | Sim not publishing / fresh project order issue | RESTART on SIM bar; if still empty, `curl $SIM_URL/status` |
-| Calls drop repeatedly, logs show 429 / gRPC code 8 | Shared regional Gemini quota under trigger density (code 8 IS the 429 — logs never say "429") | Drop to 2× or 1×; drops self-heal (5s cooldown) |
+| Calls drop repeatedly, logs show 429 / RESOURCE_EXHAUSTED | DYNAMIC SHARED QUOTA: `global` endpoint + shared request type = pool capacity, not project quota — the quota console will look fine, correctly | First: only ONE engineer per pool (`gcloud run services delete fe-frontend` if testing locally). Then drop to 2×. Sustained: `export FE_MODEL=gemini-2.5-flash GOOGLE_CLOUD_LOCATION=us-central1` and relaunch — regional GA quota is visible and raisable |
 | Voice OUT works, voice IN dead | STT recognizers are IAM resources (speech.client) — the classic dev-vs-deployed gap | In Cloud Shell it should work via student roles; on a deployed frontend, the deploy script grants it — re-run deploy_frontend |
 | Engineer silent, state moving | Engineer loop crashed at startup | Check the uvicorn terminal traceback; usually a prompts.py syntax error from T3 editing — `python -c "from starter.race_engineer import prompts"` pinpoints it |
 | "Radio failure on that one" every Q&A | Agent erroring server-side | Run the same question in agent_chat to see the real exception |
 | Student killed uvicorn mid-race | Nothing — designed for | Relaunch; the loop detects race time and resyncs. [VERIFY IN TEST 1: note exact observed behavior] |
 | RESTART mid-Q&A | Nothing — designed for | Loop flushes state on time-going-backwards. [VERIFY IN TEST 1] |
 | Browser closed/reopened | Nothing | Websocket reconnects with backoff. [VERIFY IN TEST 1] |
+| EVERYTHING on the LOCAL pit wall 503s | Cloud Shell session recycled; exports gone | Relaunch with `bash demo.sh` — re-sources everything itself |
 | Whole project broken beyond diagnosis | — | Nuclear: `python scripts/reset_race_state.py --yes`, RESTART sim; beyond that, rerun `setup/all.sh` |
+
+## What healthy looks like (engineer-loop call types)
+
+The loop logs a `scoreboard:` line every ~2 minutes and dumps a per-race
+total on every replay restart. The taxonomy, so the numbers read at a
+glance:
+
+| Call type | Gate | Counted as |
+|---|---|---|
+| EVENT REACTION | score ≥ threshold AND outside debounce | `fired:event` |
+| LAP SUMMARY | every `summary_every` laps (owed summaries are sticky) | `fired:lap_summary` |
+| MUST-SAY | held until the gap clears, fresh snapshot at delivery, 25s TTL | `fired:must_say` / `expired:must_say` |
+| Q&A | human-initiated, never gated | (not counted) |
+| Suppressed | over threshold but inside debounce — the gate doing its job | `suppressed` |
+| Dropped | agent call failed; cooldown then move on | `dropped:<kind>` |
+| Throttled | the drop's error was 429/RESOURCE_EXHAUSTED — DSQ pool pressure | `throttled:<kind>` (subset of dropped) |
+
+SUPPRESSED and DROPPED are NORMAL in moderation — a zero suppressed
+count at 5× probably means the threshold is too high, not that the loop
+is healthy.
+
+Baselines (record during Test 1 from the `scoreboard:` log lines):
+
+| Speed | fired:event | fired:lap_summary | fired:must_say | suppressed | dropped |
+|---|---|---|---|---|---|
+| 1× | [___] | [___] | [___] | [___] | [___] |
+| 2× | [___] | [___] | [___] | [___] | [___] |
+| 5× | [___] | [___] | [___] | [___] | [___] |
+
+Prior 5× observation (pre-scoreboard, eyeballed): summaries every 2–3
+laps, ~3 must-says, ONE event reaction per race.
 
 ## Open items for this doc (close during acceptance Test 1)
 
+- [ ] Record fired/suppressed/dropped scoreboard baselines at 1×/2×/5×
+      into the table above
 - [ ] Fill every [___] timing cell from the fresh-project run
 - [ ] Replace the three [VERIFY IN TEST 1] rows with observed behavior + words
 - [ ] Time the opening script end-to-end out loud; trim to fit 13:00

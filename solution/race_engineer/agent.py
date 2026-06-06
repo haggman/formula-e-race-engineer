@@ -41,7 +41,12 @@ from solution.race_engineer.tools.frame_tools import (
     get_recent_events,
 )
 
-MODEL = "gemini-3.5-flash"
+# FE_MODEL env knob — flip models without code edits. Different models
+# draw from different capacity pools; under SUSTAINED 429s the escape is
+# a GA model on a REGIONAL endpoint (visible, raisable per-project quota
+# instead of the global shared pool):
+#   export FE_MODEL=gemini-2.5-flash GOOGLE_CLOUD_LOCATION=us-central1
+MODEL = os.environ.get("FE_MODEL", "gemini-3.5-flash")
 
 # ============================================================================
 # MCP Toolbox — 11 curated BigQuery tools (toolset 'race-engineer')
@@ -66,9 +71,14 @@ shared_config = types.GenerateContentConfig(
         api_version="v1",
         headers={"X-Vertex-AI-LLM-Request-Type": "shared"},
         retry_options=types.HttpRetryOptions(
-            attempts=10,
+            attempts=4,             # fail FAST — ten attempts meant up to
+                                    # ~47s of backoff per bad LLM step. The
+                                    # trigger loop owns retry semantics:
+                                    # held must-says retry with a FRESH
+                                    # snapshot after the 5s cooldown, which
+                                    # beats shipping a stale prompt late.
             initial_delay=0.5,      # start fast
-            max_delay=8.0,          # cap each wait at 8s
+            max_delay=4.0,          # cap each wait at 4s
             exp_base=2.0,           # doubles until capped
             jitter=1.0,             # avoid thundering-herd retries
             http_status_codes=[408, 429, 500, 502, 503, 504],

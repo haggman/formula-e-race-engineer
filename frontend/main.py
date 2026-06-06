@@ -36,10 +36,35 @@ from shared.models import RaceState
 OUR_CAR_NUMBER = agent_module("config").OUR_CAR_NUMBER
 get_state_client = agent_module("tools.state_client").get_state_client
 
+# Uvicorn configures only ITS OWN loggers. Without this, every INFO line
+# from the engineer loop — radio calls, restart notices, the scoreboard —
+# is silently dropped by Python's WARNING-level lastResort handler.
+# Found the hard way: the scoreboard shipped and nobody could hear it.
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)-7s %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+logging.getLogger("httpx").setLevel(logging.WARNING)  # SIM-proxy chatter
+
 logger = logging.getLogger("frontend")
 STATIC_DIR = Path(__file__).parent / "static"
 POLL_INTERVAL_S = 1.0
 SIM_URL = os.environ.get("SIM_URL", "").rstrip("/")
+
+# Hard stop for the universal-503s footgun: a recycled Cloud Shell session
+# drops exports, the pit wall comes up sim-less, and EVERYTHING on the SIM
+# bar 503s. Local mode requires SIM_URL — fail loudly at startup with the
+# exact fix instead of limping. (Engine-mode deploys set SIM_URL in the
+# service env, so this never trips there.)
+if os.environ.get("AGENT_MODE", "local") == "local" and not SIM_URL:
+    raise SystemExit(
+        "SIM_URL is not set — the SIM bar (and the whole local pit wall) "
+        "would 503 on everything.\nFix:\n"
+        '  export SIM_URL=$(gcloud run services describe fe-simulator '
+        '--region "$REGION" --format="value(status.url)")\n'
+        "or just launch with:  bash demo.sh  (does all of this itself)"
+    )
 
 
 # ============================================================================
@@ -228,6 +253,30 @@ async def sim_config() -> dict:
         raise HTTPException(503, "SIM_URL not configured")
     async with httpx.AsyncClient() as client:
         r = await client.get(f"{SIM_URL}/config", timeout=10)
+        r.raise_for_status()
+        return r.json()
+
+
+@app.post("/api/sim/finish")
+async def sim_finish() -> dict:
+    """FINISH: jump the replay to ~10s before the checkered flag and let it
+    play out — the fast path to end-of-race states for rehearsal. Lives
+    server-side so /jump itself stays OFF the generic proxy whitelist.
+    Registered BEFORE the {action} catch-all: FastAPI matches in
+    registration order, so this must stay above sim_control.
+    Note: /status exposes no end_tick — the end is race_time_s +
+    seconds_remaining, and /jump clamps to the valid range anyway."""
+    if not SIM_URL:
+        raise HTTPException(503, "SIM_URL not configured")
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{SIM_URL}/status", timeout=10)
+        r.raise_for_status()
+        st = r.json()
+        target = (float(st.get("race_time_s", 0))
+                  + float(st.get("seconds_remaining", 0)) - 10)
+        r = await client.post(f"{SIM_URL}/jump",
+                              json={"race_time_s": max(0.0, target)},
+                              timeout=15)
         r.raise_for_status()
         return r.json()
 

@@ -186,6 +186,7 @@
         <option value="5">5×</option>
       </select>
       <label><input type="checkbox" id="sim-loop"> LOOP</label>
+      <button id="sim-finish" title="Jump to ~10s before the flag">FINISH</button>
       <span id="sim-msg"></span>
     </div>
   </div>
@@ -383,6 +384,7 @@ $("sim-pause").onclick = async () => {
 };
 $("sim-speed").onchange = e => simCall("speed", { multiplier: Number(e.target.value) });
 $("sim-loop").onchange = e => simCall("auto-restart", { enabled: e.target.checked });
+$("sim-finish").onclick = async () => { await simCall("finish"); initSimBar(); };
 initSimBar();
 
 // --- push-to-talk: hold the mic button, or hold Space outside the input ---

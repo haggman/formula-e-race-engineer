@@ -38,26 +38,70 @@ while the race is on lap 8 and the engineer doesn't know yet.
 ## Running the demo
 
 ```bash
-# Terminal 1 — from the repo root
-source activate.sh
-export AGENT_PACKAGE=solution.race_engineer   # demo the REFERENCE — the
-                                              # shell default is the starter
-export SIM_URL=$(gcloud run services describe fe-simulator \
-    --region=$REGION --format='value(status.url)')
-uvicorn frontend.main:app --host 0.0.0.0 --port 8080
-# open Web Preview on 8080
+# Terminal 1 — from the repo root; then open Web Preview on 8080
+RUN_SOLUTION=1 bash demo.sh
+
+# Stage variants — start a fresh race from the grid as the app comes up:
+#   RUN_SOLUTION=1 FRESH=1 SPEED=2 bash demo.sh   # live audience (2×, per RUN_OF_SHOW)
+#   RUN_SOLUTION=1 FRESH=1 SPEED=5 bash demo.sh   # rehearsal — ~48 min race in ~10
+#
+# Under the hood, demo.sh is exactly these lines, plus guardrails:
+#   source activate.sh
+#   export AGENT_PACKAGE=solution.race_engineer   # what RUN_SOLUTION=1 does;
+#                                                 # the shell default is the starter
+#   export SIM_URL=$(gcloud run services describe fe-simulator \
+#       --region=$REGION --format='value(status.url)')
+#   uvicorn frontend.main:app --host 0.0.0.0 --port 8080
 #
 # Or skip all of this: setup/7_deploy_cloud.sh gives a public Cloud Run
 # pit wall that ALWAYS runs the reference — no env vars needed.
 ```
 
-In the browser: click 🔇 MUTED to enable audio (browsers require the
-click), set speed to 1× for a live audience, hit RESTART on the SIM bar.
+In the browser: click 🔇 MUTED to enable audio FIRST — browsers require
+the click, and you do not want to discover a muted demo live. If you
+launched without FRESH/SPEED, the SIM bar does the same job by hand:
+pick a speed, hit RESTART.
 
 The SIM bar is your stage controls: **RESTART** rewinds to the grid,
 **PAUSE/RESUME** freezes the race (the engineer's "now" freezes with it —
 use this), speed trades realism for pace, **LOOP** keeps it running
-between sessions.
+between sessions, and **FINISH** jumps to ~10 seconds before the flag —
+the fast path to end-of-race states.
+
+## The pit wall, panel by panel
+
+What the audience is looking at, left to right:
+
+- **Header strip** — race phase, the replay clock, the 🔇/🔊 audio
+  toggle, and the connection dot (● means live state is flowing).
+- **Position tower** (left) — the whole field. Each row: position, car
+  number, driver code, an **AM badge** that lights while that car's
+  Attack Mode is active, and two pips for activations used (●○ = one
+  of two spent). Watch the tower light up on lap 3.
+- **Our-car panel** (top right) — the four numbers an engineer lives
+  by: Position (with a delta flash on change), the Lap ring, the
+  Energy gauge (▲ REGEN flickers when the battery is recovering), and
+  Attack Mode (scenario + boost budget remaining).
+- **Radio log** — everything said, stamped with race time and lap. The
+  engineer's proactive calls carry their type in the meta line:
+
+  | Tag | What triggered it |
+  |---|---|
+  | `event` | The scorer rated something above threshold — overtakes, nearby AM activations, race control |
+  | `lap_summary` | The every-N-laps situation report |
+  | `must_say` | Critical items the loop holds until there's a gap to speak |
+  | YOU + answer | A Q&A pair — the only calls a human initiates |
+
+- **Ask bar** — type and ASK, or hold the 🎤 (or SPACE outside the
+  text box) and talk; release to send the transcript.
+- **SIM bar** — the stage controls above.
+
+One thing deliberately NOT in the UI: the **scoreboard**. Every ~2
+minutes — and again on every race restart — the engineer loop prints a
+`scoreboard:` line to the terminal running demo.sh, counting
+fired/suppressed/dropped calls by type. Instructor diagnostics, not
+audience material; the taxonomy and baseline tables live in
+RUN_OF_SHOW.md ("What healthy looks like").
 
 ## The scripted moments (laps 1–11)
 

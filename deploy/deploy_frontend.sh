@@ -35,6 +35,12 @@ fi
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Which agent package the deployed frontend resolves prompts/config/persona
+# through. Default: the reference. Bonus path:
+#   export DEPLOY_AGENT_PACKAGE=starter.race_engineer
+# ships YOUR team's agent with the deployed pit wall.
+DEPLOY_AGENT_PACKAGE="${DEPLOY_AGENT_PACKAGE:-solution.race_engineer}"
+
 # --- The deployed engine (required: this frontend runs AGENT_MODE=engine) ---
 ENGINE_FILE="${REPO_ROOT}/deploy/.engine_resource"
 if [[ ! -f "$ENGINE_FILE" ]]; then
@@ -56,6 +62,7 @@ echo "Service: $SERVICE_NAME"
 echo "SA:      $SA_EMAIL"
 echo "Engine:  $ENGINE_RESOURCE"
 echo "Sim:     ${SIM_URL:-<none>}"
+echo "AgentPkg: ${DEPLOY_AGENT_PACKAGE}"
 echo "=================================================================="
 
 # --- Enable APIs ---
@@ -148,7 +155,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --concurrency=80 \
     --timeout=3600 \
     --session-affinity \
-    --set-env-vars="AGENT_MODE=engine,AGENT_ENGINE_RESOURCE=${ENGINE_RESOURCE},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},PROJECT_ID=${PROJECT_ID},RACE_ID=berlin_2024_r10,SIM_URL=${SIM_URL}"
+    --set-env-vars="AGENT_MODE=engine,AGENT_ENGINE_RESOURCE=${ENGINE_RESOURCE},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},PROJECT_ID=${PROJECT_ID},RACE_ID=berlin_2024_r10,SIM_URL=${SIM_URL},AGENT_PACKAGE=${DEPLOY_AGENT_PACKAGE}"
 
 URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
 

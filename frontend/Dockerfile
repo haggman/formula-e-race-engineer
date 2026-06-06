@@ -10,6 +10,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # the agent RUNTIME lives on Agent Engine; see frontend/requirements.txt)
 COPY shared/ ./shared/
 COPY solution/ ./solution/
+# Bonus deploy path: either agent package must resolve in-container
+# (AGENT_PACKAGE=starter.race_engineer ships a team's own agent).
+COPY starter/ ./starter/
 
 # The service itself (main.py, engineer_loop.py, agent_client.py, tts/stt, static UI)
 COPY frontend/ ./frontend/

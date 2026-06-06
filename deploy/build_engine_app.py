@@ -27,6 +27,10 @@ on the engine. So we build `build/engine_app/`:
 
 Run from the repo root:  python3 deploy/build_engine_app.py
 Idempotent: wipes and rebuilds build/engine_app each time.
+DEPLOY_AGENT_PACKAGE picks the source package (default
+solution.race_engineer; bonus: starter.race_engineer ships a team's own
+agent). Deliberately its OWN knob — NOT activate.sh's AGENT_PACKAGE,
+whose starter default would footgun instructor deploys.
 """
 from __future__ import annotations
 
@@ -40,6 +44,12 @@ REPO = pathlib.Path(__file__).resolve().parent.parent
 BUILD = REPO / "build" / "engine_app"
 TOOLBOX_URL = os.environ.get("TOOLBOX_URL", "")
 PROJECT_ID = os.environ.get("PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT", "")
+
+# Which agent package gets vendored onto the engine. Its OWN env knob on
+# purpose: activate.sh's AGENT_PACKAGE defaults to starter for local dev,
+# and inheriting that here would silently deploy stubs as the reference.
+AGENT_PACKAGE = os.environ.get("DEPLOY_AGENT_PACKAGE", "solution.race_engineer")
+PKG_PATH = REPO.joinpath(*AGENT_PACKAGE.split("."))
 
 AGENT_PY = '''"""Agent Engine entrypoint shim.
 
@@ -70,11 +80,17 @@ TOOLBOX_URL={TOOLBOX_URL}
 PROJECT_ID={PROJECT_ID}
 """
 
-# A REAL unrewritten import of the old package path — what the stale check
-# hunts for. Matches import statements only, not docstrings, comments, or
-# string literals (shared/agent_pkg.py's env default taught us why).
+# Rewrite the SOURCE package path to the vendored top-level name; both
+# patterns parameterized on AGENT_PACKAGE so the bonus path
+# (starter.race_engineer) vendors just as cleanly as the reference.
+REWRITE_RE = re.compile(r"\b" + re.escape(AGENT_PACKAGE) + r"\b")
+# A REAL unrewritten import of the source package path — what the stale
+# check hunts for. Matches import statements only, not docstrings,
+# comments, or string literals (shared/agent_pkg.py's env default taught
+# us why).
 STALE_IMPORT_RE = re.compile(
-    r"^\s*(?:from|import)\s+solution\.race_engineer\b", re.MULTILINE
+    r"^\s*(?:from|import)\s+" + re.escape(AGENT_PACKAGE) + r"\b",
+    re.MULTILINE,
 )
 
 
@@ -89,7 +105,7 @@ def vendor(src: pathlib.Path, dst: pathlib.Path, rewrite: bool,
     if rewrite:
         for py in dst.rglob("*.py"):
             text = py.read_text()
-            new = re.sub(r"\bsolution\.race_engineer\b", "race_engineer", text)
+            new = REWRITE_RE.sub("race_engineer", text)
             if new != text:
                 py.write_text(new)
                 rewritten += 1
@@ -107,8 +123,10 @@ def main() -> None:
         shutil.rmtree(BUILD)
     BUILD.mkdir(parents=True)
 
-    n = vendor(REPO / "solution" / "race_engineer", BUILD / "race_engineer",
-               rewrite=True)
+    if not (PKG_PATH / "agent.py").is_file():
+        sys.exit(f"DEPLOY_AGENT_PACKAGE={AGENT_PACKAGE} has no agent.py at "
+                 f"{PKG_PATH} — expected a package like solution.race_engineer.")
+    n = vendor(PKG_PATH, BUILD / "race_engineer", rewrite=True)
     vendor(REPO / "shared", BUILD / "shared", rewrite=False,
            extra_ignore=("agent_pkg.py",))  # client-side seam; see module docstring
 
@@ -130,7 +148,8 @@ def main() -> None:
     mod = importlib.import_module("race_engineer.prompts")  # no GCP deps at import
     assert hasattr(mod, "build_event_reaction_prompt")
     print(f"Staged {BUILD}")
-    print(f"  race_engineer/: {n} files had imports rewritten")
+    print(f"  race_engineer/: vendored from {AGENT_PACKAGE} "
+          f"({n} files had imports rewritten)")
     print(f"  shared/: vendored (agent_pkg.py excluded — client-side seam)")
     print(f"  TOOLBOX_URL baked into .env: {TOOLBOX_URL}")
     print("Import self-check passed (race_engineer.prompts loads from the staged tree).")

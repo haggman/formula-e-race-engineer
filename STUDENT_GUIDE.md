@@ -68,6 +68,36 @@ If your setup script is still running from the opening, let it finish, then:
 bash setup/verify.sh        # five checks; you want the GREEN LIGHT
 ```
 
+### Gemini Code Assist is sitting right there
+
+The Cloud Shell Editor has Gemini Code Assist built in — use it.
+Highlight the worked example and ask "explain how this tool reads the
+race frame"; ask it to draft a docstring; ask why a type hint matters
+to ADK.
+
+One warning: Code Assist may suggest **ADK 2.0** APIs (GA since May
+2026 — graph Workflow Runtime, new callback model). This lab is pinned
+to **ADK 1.x**. If a suggestion or a doc page mentions *Workflow
+Runtime*, *graphs*, or a *Task API*, you're reading 2.0 — back out. The
+worked example in `starter/race_engineer/tools/frame_tools.py` is
+ground truth for the patterns this repo uses.
+
+### Learn ADK fast (curated, 1.x-safe)
+
+- Function tools — plain Python functions; the docstring and type hints
+  ARE the API the model sees:
+  https://google.github.io/adk-docs/tools-custom/function-tools/
+- Custom tools overview: https://google.github.io/adk-docs/tools-custom/
+- Python quickstart (LlmAgent, runners):
+  https://google.github.io/adk-docs/get-started/python/
+- API reference: https://google.github.io/adk-docs/api-reference/python/
+  — it now defaults to 2.0.0; trust the repo's worked example when they
+  disagree.
+- MCP Toolbox: https://googleapis.github.io/genai-toolbox/ — our server
+  runs v1.3.0 and the current docs describe the newer v2 config format,
+  so when you touch `toolbox/tools.yaml`, copy the shape of the
+  EXISTING tools in the file, not the docs.
+
 ---
 
 ## Two minutes of Formula E (everything your agent needs to know, you
@@ -76,13 +106,15 @@ should know too)
 **The race:** Berlin E-Prix 2024 Round 10. 41 laps, ~48 minutes. Da Costa
 (DAC, car 13, TAG Heuer Porsche) starts P10, carves to P3 by lap 5, and
 wins. His main fights: Cassidy (CAS) — 11 position exchanges, the real
-battle for the win — and Vergne (JEV), his grid neighbor.
+battle for the win — and Vergne (JEV), his grid neighbor. Two
+retirements punctuate the story: GUE (car 7) on lap 10 and FEN (car
+23) on lap 24.
 
 **Attack Mode**, the strategic heart of Formula E:
 
 - A fixed power boost (300 kW → 350 kW), earned by driving through an
-  activation zone placed OFF the racing line — taking it costs track
-  position. When it's active, the car's halo glows magenta; everyone can
+  activation zone placed OFF the racing line (at Berlin: Turn 2) —
+  taking it costs track position. When it's active, the car's halo glows magenta; everyone can
   see it.
 - Every driver must use exactly TWO activations per race. The total boost
   time is 240 seconds, split per a pre-armed "scenario": 1 = 60s+180s,
@@ -95,6 +127,10 @@ battle for the win — and Vergne (JEV), his grid neighbor.
   duration power committed against an unknown future.
 - On lap 3 of this race, about half the field activates within seconds —
   watch your position tower light up orange. DAC deliberately holds back.
+- The move of this race, laps 7–9: DAC deliberately hands back the lead
+  to take his short 60s activation, drops to P3, and repasses with the
+  boost still lit — a planned sacrifice. An engineer that calls it as
+  it happens earns its seat.
 
 **Energy:** every car finishes with exactly 100% of its budget consumed
 (the data is normalized), so what matters is mid-race deltas versus the
@@ -194,9 +230,8 @@ hear on stage.
 **Test surface:** the pit wall — this is where voice lives.
 
 ```bash
-# WHERE: Cloud Shell, repo root, activated
-export SIM_URL=$(gcloud run services describe fe-simulator --region=$REGION --format='value(status.url)')
-uvicorn frontend.main:app --host 0.0.0.0 --port 8080
+# WHERE: Cloud Shell, repo root (any tab — it sources activate.sh itself)
+bash demo.sh
 # Web Preview → port 8080; click 🔇 to enable audio (the click unlocks it);
 # RESTART on the SIM bar; 2× is a good build speed.
 ```
@@ -220,6 +255,15 @@ decides WHAT to say. T4 is tuning that judgment:
   — he's going long") is invisible to it today. The data is there
   (`get_am_armings`, and arming events flow through the event stream).
   Write the rule, pick its weight, decide if it's must-say.
+- **The missing tool:** the toolbox has no name → car-number lookup, so
+  the prompt currently steers the model around it. Add a curated
+  `lookup_driver` to `toolbox/tools.yaml` — copy the shape of an
+  existing tool: `drivers` JOIN `startgrid`, matching
+  `UPPER(driver_last_name)` OR `driver_short_name`. Redeploy with
+  `bash setup/3_deploy_toolbox.sh`, then try trimming the name-steering
+  from the prompt and watch the tool chains get shorter. Heads-up:
+  `setup/verify.sh` expects exactly 14 tools, so your 15th flags ✗
+  there — expected, not broken.
 
 **Test surface:** `scripts/local_test.py` — the trigger loop as a fast
 terminal harness:
@@ -234,15 +278,20 @@ space your tuning controls.
 ## Working as a team
 
 The seam makes parallel work clean — one integration point
-(`starter/race_engineer/`), four lanes:
+(`starter/race_engineer/`), four lanes, four test scripts, nobody waits
+on anybody:
 
-- **Tools** (T1): frame_tools.py
-- **Data** (T2+): wire the Toolbox, then go treasure-hunting — this
-  dataset has famous quirks (a broken top-speed column, two ID domains in
-  one event stream). Add a curated Toolbox tool if you find something good.
-- **Persona** (T3): prompts.py — needs T1's get_current_state only, can
-  start immediately in agent_chat
-- **Triggers** (T4): scorer weights + the arming rule
+| Lane | You own | Validator | Needs first |
+|---|---|---|---|
+| **Tools** (T1) | `tools/frame_tools.py` | `python scripts/test_frame_tools.py --live` | setup green |
+| **Data** (T2+) | the Toolbox TODO in `agent.py`, then treasure-hunting — this dataset has famous quirks (a broken top-speed column, two ID domains in one event stream); add a curated tool if you find something good | `python scripts/agent_chat.py` | setup green |
+| **Persona** (T3) | `prompts.py` | `bash demo.sh` | T1's `get_current_state` only — start immediately |
+| **Triggers** (T4) | scorer weights + the arming rule | `python scripts/local_test.py --verbose` | Tools lane green |
+
+**Integration ritual** (10 minutes, mid-afternoon): frame tools all ✓ →
+one fused question in `agent_chat.py` (the Wehrlein pace comparison) →
+`bash demo.sh` and let it talk through lap 3. Three passes = your lanes
+merged.
 
 ## Question bank (for your demos)
 
@@ -263,11 +312,19 @@ doesn't know is the one you trust on what it does.
 |---|---|---|
 | `NotImplementedError: TODO(T1)` | That's your TODO list talking | Implement it — spec is above the raise |
 | Script complains about env/venv | New tab, not activated | `source activate.sh` |
+| EVERYTHING on the local pit wall 503s | Cloud Shell session recycled; your exports are gone | Relaunch with `bash demo.sh` — it re-sources everything itself |
 | Tower empty, no state | Sim not publishing / fresh reset | RESTART on the SIM bar |
 | Calls dropped, log mentions limit | Tool-budget ceiling did its job | Fine in moderation; if constant, your prompt is sending the agent wandering |
 | Agent answers feel stale at 5× | The world moves while it thinks | Build at 2×; savor at 1× |
 | No audio | Browser autoplay policy | Click the 🔇 toggle — the click is the unlock |
 | Engineer invents a driver name | It shouldn't — the HONESTY section forbids it | If you removed that section, put it back |
 | Totally stuck | — | Same filename in `solution/` — that's what it's for |
+
+## Finished early?
+
+Open **BONUS.md** — a board of additive tickets (voice picker,
+tool-call observability panel, post-race debrief, deploying YOUR agent
+to a public URL), sized S/M/L. Nothing on it can break what you
+already demo.
 
 Now go build. Antonio's waiting on the radio.
