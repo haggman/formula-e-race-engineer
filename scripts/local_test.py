@@ -6,7 +6,7 @@ The loop the frontend's engineer_loop reimplements around a websocket:
 
 WHICH AGENT: resolved through the AGENT_PACKAGE seam (shared/agent_pkg.py)
 — with activate.sh defaults this drives YOUR starter agent, which makes it
-the fast T4 surface for trigger tuning: edit shared/scorer.py weights or
+the fast Tier D surface for trigger tuning: edit shared/scorer.py weights or
 your prompts, rerun, read the transcript. To run the reference instead:
     AGENT_PACKAGE=solution.race_engineer python scripts/local_test.py ...
 

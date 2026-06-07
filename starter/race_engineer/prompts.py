@@ -1,11 +1,11 @@
 """Prompts for the Race Engineer agent — all natural-language text lives here.
 STARTER.
 
-============================== YOUR T3 SURFACE ==============================
+============================== YOUR TIER C SURFACE ==============================
 The instruction below is assembled from SECTIONS. Two are yours to write —
 VOICE and CALL_TYPES — and they're what turns a database-reader into a race
 engineer. The placeholders WORK (the agent runs as shipped), but it sounds
-like a robot reading rows aloud. Your reward for T3 is hearing the
+like a robot reading rows aloud. Your reward for Tier C is hearing the
 difference on the pit wall, out loud, in your own persona.
 
 Everything else is GIVEN and marked so. The given sections are hard-won:
@@ -39,7 +39,7 @@ E-Prix 2024 Round 10. You are on the radio with him during a live race.
 """
 
 # ============================================================================
-# TODO(T3) — VOICE: yours to write.
+# TODO(C) — VOICE: yours to write.
 #
 # This section defines HOW the engineer speaks. The reference enforces all
 # of the following — write rules (in your own words) that achieve them:
@@ -90,7 +90,7 @@ _TTS_RULES = """
 """
 
 # ============================================================================
-# TODO(T3) — CALL TYPES: yours to write.
+# TODO(C) — CALL TYPES: yours to write.
 #
 # The frontend fires the agent three ways; each needs a defined shape.
 # The reference defines, roughly:
@@ -248,7 +248,7 @@ ROOT_AGENT_INSTRUCTION = "\n".join(
 # frontend's engineer loop calls these builders; the snapshot in the prompt
 # is AUTHORITATIVE for the call (it pins the moment the trigger fired, so
 # the agent doesn't re-fetch a world that has moved on at replay speed).
-# T4 tinkerers: the tool budgets stated here pair with hard ceilings in
+# Tier D tinkerers: the tool budgets stated here pair with hard ceilings in
 # frontend/agent_client.py.
 # ============================================================================
 

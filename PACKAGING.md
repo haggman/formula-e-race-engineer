@@ -184,3 +184,106 @@ formula-e-race-engineer/
   frontend/static/index.html ← surname tower, meta secs·tools
   RUN_OF_SHOW.md, PACKAGING.md ← this drop
 ```
+## Phase 2.8 — rehearsal + cleanup closeout (2026-06-06)
+
+### Findings (new this session; all patched + shipped)
+
+**Finding #10 — persistent Q&A session survives replay restarts; failed
+asks poison it.** Symptom: the Cassidy fused question ran textbook in a
+fresh `agent_chat` session (name-resolve CAS→37 via field_am_status,
+parallel get_energy_curve, 12.2s, zero retries) yet the pit wall returned
+"Radio failure" then "no telemetry for Cassidy" — the persistent session
+had checkpointed a failed ask mid-stream (the Finding #9 mechanism) and
+every later ask inherited the poison. In engine mode the session even
+survives frontend restarts. Fix (`qa_rotate_patch`, shipped): both agent
+clients grew `reset_qa_session()` with a rotatable unique session id; the
+engineer loop's restart branch calls it and logs "Q&A session rotated for
+the new race". RESTART is now the designed reset; the SESSION_RESET bounce
+is demoted to belt-and-braces. Verified post-deploy (proper fresh-session
+answer; rotation log line confirmed sighted at restart).
+
+**Finding #11 — deploy_frontend.sh died silently (exit 1, zero output).**
+A bare `SIM_URL=$(gcloud ... 2>/dev/null)` assignment under `set -e`
+killed the script on a transient gcloud failure — one line BEFORE its own
+WARN guard could run. Fix (shipped, applied inline): `|| true` inside the
+substitution, matching setup/7 and verify.sh (demo.sh was accidentally
+immune via the `export` builtin swallowing the status). Earned the
+troubleshooting row: silent script death ⇒ `echo $?`, then
+`bash -x ... | tail -20`.
+
+**Finding #12 — Finding #8's IAM race on the one unpatched surface.**
+simulator/deploy.sh granted topic-level pubsub.publisher with NO retry;
+on a fresh project the grant fired seconds after SA creation and died on
+"service account does not exist" — at step 6, the LAST step of all.sh,
+during the window students run it unattended. Hit live creating the new
+rehearsal project. Fix (`sim_iam_retry_patch`, shipped): the same 6×10s
+retry loop as its three siblings; RUN_OF_SHOW's "steps 3/5/6" retry row is
+now literally true.
+
+### Finding #7 addendum — lite promotion test (graded, FAIL)
+
+Promotion test run 2026-06-06 (2× stint, laps 1–12, graded): timing facts
+and AM durations exact, 3/3 must-says — but FAILED the filler scrub
+(literal "Focus on…" inside a must-say) and grounding (94-behind-Wehrlein
+contradiction, ungrounded rival AM claim at 0 tools, invented
+power-settings speculation). Stays the tested first escape rung; default
+unchanged (`gemini-3.5-flash`). Stint scoreboard for reference: 14 event /
+6 summary / 3 must-say / 37 suppressed / 0 dropped.
+
+### Decisions
+
+- Tiers renamed **Tier A–D** (docs and code markers; "Challenge" collides
+  with the hackathon-series naming).
+- Default model stays `gemini-3.5-flash` — grades, not vibes (see #7
+  addendum).
+- Opening restructured: 0–2 students start engines / 2–4 frame / 4–10 demo
+  / 10–15 what-you-have (diagram) / 15–19 goals+tiers / 19–20 logistics.
+  Immovable beats: Step-0 paste by 2:00, student-screen glance, answer-key
+  policy aloud. Rehearsed: demo done by 10:00; lap-3 cluster fired as ONE
+  call at the deployed wall.
+- RESTART rotates the Q&A session (Finding #10); pre-flight gained a
+  throwaway warm-up question (first ask after deploy is slowest — inline
+  session create, now visible via the Q&A secs meta).
+
+### Phase 2.8 delivered
+
+- STUDENT_GUIDE.md rewritten for strangers: Step-0 block (incl.
+  `cloudshell workspace .`), tinyurl placeholder, ⏸ stop-here, per-tier
+  scaffold (open this file → challenge → need-to-know → done-looks-like →
+  test → checkpoint), question bank as rows, surname-vs-code note,
+  architecture diagram embed.
+- HOW_IT_WORKS.md (NEW): frames, services, two worlds + clock bridge,
+  trigger loop, journey-of-a-question, YOURS/READ/PLUMBING file map.
+- RUN_OF_SHOW.md rewritten for a stranger-deliverer: SAY/SHOW/WHY per
+  segment; measured cells (step 7 = 8m14s first-create: engine 5m32s
+  silent + frontend 2m42s); reworded pre-flight (FINISH = don't press;
+  warm-up ask; bounce demoted); new troubleshooting rows (stale Q&A,
+  silent-death triage, log commands); the all-backends-503 protocol;
+  model-ladder note with the lite FAIL; one-engineer-per-pool rule.
+- docs/architecture.svg (NEW): hand-coded, GitHub-safe, Tier A–D bar.
+- Code tier markers renamed via this patch.
+
+### Acceptance tests
+
+- **Test 1 (instructor path) — CLOSED** with noted exceptions: step-7 cell
+  filled (true first-create on a fresh resourced project), engine_smoke
+  green, opening rehearsed out loud within budget, cluster-as-one-call
+  confirmed at the deployed wall. Deliberately skipped: the 2×/1×
+  full-race scoreboard rows (the 5× P2.6 rows stand as canonical; Patrick:
+  "happy with what we have"). Deferred to event morning: the lap-2 → 1×
+  drop-point confirmation (in RUN_OF_SHOW's event-morning checklist).
+- **Test 2 (docs voice pass) — CLOSED**: nine sections reviewed in voice,
+  all ADK links verified live, Toolbox link 404 fixed (mcp-toolbox.dev),
+  README tool-count wording fixed, GIVEN banners consistent, BONUS tickets
+  reference real surfaces, timing table sums.
+
+### Open-items disposition
+
+- all-backends-503 triage → CLOSED (protocol landed in RUN_OF_SHOW).
+- qa_latency probe → CLOSED, moot (Q&A wall-secs now stamped on every
+  answer via P2.7).
+- Resourced-project-type provisioning for the event → PARKED, now an
+  event-morning checklist item in RUN_OF_SHOW.
+- Optional nits, deliberately left: setup/7 header could mention the
+  DEPLOY_AGENT_PACKAGE override; DRIVERS map's `full` field is dead data
+  post-tooltip (plausible BONUS consumer).

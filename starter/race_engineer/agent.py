@@ -3,12 +3,12 @@
 Model, retry config, and tool registration only. All natural-language text
 (description, instruction) lives in prompts.py.
 
-============================== YOUR T2 SURFACE ==============================
-The frame tools (your T1 work) are already registered below. T2 is ONE
+============================== YOUR TIER B SURFACE ==============================
+The frame tools (your Tier A work) are already registered below. Tier B is ONE
 block: wire the MCP Toolbox so the agent can reach BigQuery — the recorded
-race history and career stats. Look for TODO(T2).
+race history and career stats. Look for TODO(B).
 
-Until T2 is done this agent has only the live "now" (Firestore). After T2
+Until Tier B is done this agent has only the live "now" (Firestore). After Tier B
 it has both worlds, and questions like "compare our pace to Wehrlein over
 the last 5 laps" start working. Test in scripts/agent_chat.py.
 =============================================================================
@@ -23,7 +23,7 @@ Required env (exported by `source activate.sh`):
   GOOGLE_GENAI_USE_VERTEXAI=1
   GOOGLE_CLOUD_PROJECT=<lab project>
   GOOGLE_CLOUD_LOCATION=global
-  TOOLBOX_URL=<deployed fe-toolbox URL>   # needed once T2 is wired
+  TOOLBOX_URL=<deployed fe-toolbox URL>   # needed once Tier B is wired
 """
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ from starter.race_engineer.tools.frame_tools import (
 MODEL = os.environ.get("FE_MODEL", "gemini-3.5-flash")
 
 # ============================================================================
-# TODO(T2): MCP Toolbox — 14 curated BigQuery tools (toolset 'race-engineer')
+# TODO(B): MCP Toolbox — 14 curated BigQuery tools (toolset 'race-engineer')
 # ============================================================================
 # Spec:
 #   1. Import: from google.adk.tools.toolbox_toolset import ToolboxToolset
@@ -70,7 +70,7 @@ MODEL = os.environ.get("FE_MODEL", "gemini-3.5-flash")
 #      registration logic at the bottom already appends it when non-None.
 # Reference: solution/race_engineer/agent.py
 # ============================================================================
-toolbox_tools = None  # TODO(T2): replace with the ToolboxToolset
+toolbox_tools = None  # TODO(B): replace with the ToolboxToolset
 
 # ============================================================================
 # Retry config — GIVEN, don't edit. Exponential backoff for 408/429/5xx;
