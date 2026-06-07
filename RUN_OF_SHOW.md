@@ -16,7 +16,7 @@ the rendered STUDENT_GUIDE on GitHub. **`TINYURL: https://tinyurl.com/FE-Hack-2`
 |---|---|
 | −1:00 | Your morning-of setup (below) — done before doors |
 | 0:00–0:20 | The opening (scripted below) |
-| 0:20–2:40 | Students build Tier A→D; you circulate (checkpoint beats below) |
+| 0:20–2:40 | Students build Tier A→E (F = stretch); you circulate (checkpoint beats below) |
 | 2:40–3:00 | The wrap: volunteer demos + debrief |
 
 ## Morning-of: build the instructor stack
@@ -33,13 +33,15 @@ You need: the data plane, the deployed engine, and the public pit-wall URL
 > bash setup/all.sh              # data plane: budget 20 min, ~10 typical
 > bash setup/7_deploy_cloud.sh   # engine + public pit wall: budget 10
 > python scripts/engine_smoke.py # one real call through the deployed engine
+> python scripts/stage_probe.py --stage a   # rehearse the Tier A beat (~2 min)
+> python scripts/stage_probe.py --stage b   # rehearse Tier B + the set-piece (~5 min)
 > ```
 
 Measured timings (fresh resourced project, 2026-06-06):
 
 | Step | Measured | Notes |
 |---|---|---|
-| `setup/all.sh` (steps 1–6 + verify) | ~10 min typical, budget 20 | Firestore index builds are the variable. "…IAM can't see SA yet — retry N/6" lines during steps 3/5/6 are NORMAL on a fresh project (new-SA propagation), not failures. |
+| `setup/all.sh` (steps 1–6 + verify) | ~10 min typical, budget 20 | Firestore index builds are the variable. "…IAM can't see … yet — retry N/6" lines during steps 3/5/6/7 are NORMAL on a fresh project (SA and service-agent propagation), not failures. |
 | `setup/7_deploy_cloud.sh` | **8m 14s** first-create | Engine create **5m 32s** — and it is SILENT; the script prints a log-watch one-liner, open it in a second tab so the silence has a heartbeat. Frontend build+deploy **2m 42s**. Reruns (engine update) are faster. |
 
 The script ends by printing the public pit-wall URL — that URL goes on the
@@ -156,26 +158,32 @@ snapshot of all 22 cars every race-second; a writer turning those into a
 live 'now' in Firestore. Bottom right — also given: the same race's full
 history, plus ten seasons of careers, in BigQuery behind fourteen query
 tools. Right column — given: this pit wall, the voice loop, and the trigger
-system that decides when to speak. The middle column is YOURS: the agent.
-Four surfaces, Tier A through D — teach it to see, give it a memory, give
+system that decides when to speak. The middle column is YOURS: the agent —
+six tiers. Build it from nothing, ground it, curate it, take it live, give
 it a voice, tune its judgment. Each tier ends with something you can demo."
 **WHY:** ownership boundaries kill the #1 time-sink (reverse-engineering
 the plumbing). Point at file paths on the cards — they're real.
 
 ### 15:00–19:00 — Goals + tiers
 
-**SAY:** "Tier A, about forty minutes: three frame tools — there's a worked
-example, the patterns are all in it. Tier B, forty-five: one construction
-wires in fourteen BigQuery tools, and that's when two-world questions start
-working. Tier C, thirty: the persona — your engineer, your voice, out loud.
-Tier D is yours to play: trigger weights, a new strategic rule, a missing
-tool. Stop anywhere and you still demo something real. Teams: there's a
-lanes table — persona can start immediately, don't serialize.
+**SAY:** "Tier A, fifteen minutes: `adk create`, a prompt, and an agent
+that answers everything — and you'll prove you can't trust a word of it.
+Tier B, twenty: you write ONE tool, a raw SQL hatch into the recorded
+race, and it gets grounded — grounded and still wrong in a way I'll show
+you live. Tier C, fifteen: one construction wires in fourteen curated
+tools and the wrongness gets fixed. Tier D, twenty-five: you graduate
+into the production package, read the given live-world tools, wire the
+toolbox there, and your agent hits the pit wall knowing what NOW means.
+Tier E, thirty: persona — your engineer, your voice, out loud. Tier F is
+yours to play: trigger weights, a new strategic rule, a missing tool.
+Every tier ends with something running. Stop anywhere and you still demo
+something real. Teams: there's a lanes table — persona and triggers can
+start immediately, don't serialize the room.
 
 And hear this clearly: `solution/` is the answer key, same layout file for
-file, and using it is SHIPPING, not cheating. Stuck ten minutes? Open the
-same filename, read, move on. You learn more from shipping than from
-suffering."
+file — your Tiers A–C key is `solution/scaffold/` — and using it is
+SHIPPING, not cheating. Stuck ten minutes? Open the same filename, read,
+move on. You learn more from shipping than from suffering."
 **WHY:** the answer-key policy spoken aloud is the single best protector of
 room energy. Don't skip it.
 
@@ -192,12 +200,31 @@ it's in your editor. Go build."
 - **First 15 min:** sweep for `bash setup/verify.sh` green lights. A ✗
   names its own fix; "indexes building" just means wait.
 - **Checkpoint beats** (call them out as the room reaches them; each is a
-  STUDENT_GUIDE "Checkpoint demo"): **Tier A** — agent_chat answering
-  "where are we right now?" through THEIR tools, calls printing inline.
-  **Tier B** — the Wehrlein pace comparison fusing both worlds. **Tier C**
+  STUDENT_GUIDE "Checkpoint demo"): **Tier A** — someone's scaffold
+  confidently inventing attack-mode scenarios next to a true headline.
+  **Tier B** — the fastest lap and the top-speed recovery, tool calls
+  printing live; then YOUR set-piece (below). **Tier C** — the Vergne
+  question turning correct. **Tier D** — the room's first true "who's
+  behind us right now," then the Wehrlein fusion at the wall. **Tier E**
   — the room gets loud: engineers talking in student voices over lap 3.
   Encourage speakers-on; it's the energy engine of the afternoon.
-  **Tier D** — someone's custom trigger firing live.
+  **Tier F** — someone's custom trigger firing live.
+
+### The Tier B set-piece (run it from the front, once, when the room is mid-B)
+
+On a Tier B agent — your morning-rehearsal scaffold or a volunteer's —
+ask: *"How many times did we overtake Vergne? We're car 13, he's car
+25."* Expect 50–70 seconds, 15–19 tool calls, and a confident WRONG
+answer that dismisses the contradicting rows as "telemetry glitches" or
+"loop calculation noise." It didn't hallucinate facts — it hallucinated
+an EXPLANATION for data it couldn't reconcile (those event rows carry the
+subject's GRID POSITION in car_number; they were never about car 13).
+The line to land: "Grounding moved the lie. It didn't remove it." Then,
+when the room reaches Tier C: same question, one tool call, correct —
+`get_overtakes_involving` was built on the view that decodes that exact
+trap. Rehearse this once in the morning (`scripts/stage_probe.py`, both
+stages, ~5 min); the transcript varies, the wrongness hasn't (2-for-2 in
+the design probes).
 - The question bank (guide + DEMO.md) feeds anyone whose demo needs
   material. The weather question is the crowd-pleaser.
 - Mid-afternoon, nudge teams to the 10-minute integration ritual (lanes
@@ -205,7 +232,7 @@ it's in your editor. Go build."
 
 ## The wrap (last 20 minutes)
 
-Volunteer demos — push for voice questions and custom Tier-D triggers, not
+Volunteer demos — push for voice questions and custom Tier-F triggers, not
 slideware. Close on the doctrine: "Every group here built the same thing
 in one important sense: a system where the AI never decides WHEN to act —
 deterministic code does — and is never trusted on facts it didn't pull

@@ -3,14 +3,16 @@
 Model, retry config, and tool registration only. All natural-language text
 (description, instruction) lives in prompts.py.
 
-============================== YOUR TIER B SURFACE ==============================
-The frame tools (your Tier A work) are already registered below. Tier B is ONE
-block: wire the MCP Toolbox so the agent can reach BigQuery — the recorded
-race history and career stats. Look for TODO(B).
+============================== YOUR TIER D SURFACE ==============================
+The frame tools (given — your Tier D reading) are already registered below.
+Tier D's build move is ONE block: wire the MCP Toolbox so the agent can
+reach BigQuery — the recorded race history and career stats. Look for
+TODO(D). You wired this exact construction in your scaffold at Tier C;
+this is the production copy.
 
-Until Tier B is done this agent has only the live "now" (Firestore). After Tier B
-it has both worlds, and questions like "compare our pace to Wehrlein over
-the last 5 laps" start working. Test in scripts/agent_chat.py.
+Until that block is done this agent has only the live "now" (Firestore).
+After it, it has both worlds, and questions like "compare our pace to
+Wehrlein over the last 5 laps" start working. Test in scripts/agent_chat.py.
 =============================================================================
 
 Two tool families, one agent:
@@ -51,7 +53,7 @@ from starter.race_engineer.tools.frame_tools import (
 MODEL = os.environ.get("FE_MODEL", "gemini-3.5-flash")
 
 # ============================================================================
-# TODO(B): MCP Toolbox — 14 curated BigQuery tools (toolset 'race-engineer')
+# TODO(D): MCP Toolbox — 14 curated BigQuery tools (toolset 'race-engineer')
 # ============================================================================
 # Spec:
 #   1. Import: from google.adk.tools.toolbox_toolset import ToolboxToolset
@@ -70,7 +72,7 @@ MODEL = os.environ.get("FE_MODEL", "gemini-3.5-flash")
 #      registration logic at the bottom already appends it when non-None.
 # Reference: solution/race_engineer/agent.py
 # ============================================================================
-toolbox_tools = None  # TODO(B): replace with the ToolboxToolset
+toolbox_tools = None  # TODO(D): replace with the ToolboxToolset
 
 # ============================================================================
 # Retry config — GIVEN, don't edit. Exponential backoff for 408/429/5xx;

@@ -1,10 +1,12 @@
 """Validate the agent's frame tools against Firestore.
 
-THE TIER A CHECKPOINT VALIDATOR. Resolved through the AGENT_PACKAGE seam
-(shared/agent_pkg.py), so with activate.sh defaults this tests YOUR tools
-in starter/race_engineer/tools/frame_tools.py. Unimplemented tools show as
-NotImplementedError("TODO(A): ...") — that's your checklist: when every
-section prints ✓, Tier A is done. To validate the reference instead:
+THE FRAME-TOOLS VALIDATOR (Tier D: prove the GIVEN tools against the live
+replay). Resolved through the AGENT_PACKAGE seam (shared/agent_pkg.py), so
+with activate.sh defaults this tests starter/race_engineer/tools/
+frame_tools.py — which ships COMPLETE: every section should print ✓ as-is,
+and a ✗ means environment (simulator not running, stale Firestore), not
+code. If you took the BONUS "build your own frame tool" ticket, this is
+your checklist. To validate the reference instead:
     AGENT_PACKAGE=solution.race_engineer python scripts/test_frame_tools.py
 
 Two modes:

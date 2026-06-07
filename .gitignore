@@ -42,3 +42,5 @@ htmlcov/
 .adk/
 
 deploy/.engine_resource
+
+spike_transcripts/

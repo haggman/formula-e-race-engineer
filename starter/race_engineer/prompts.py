@@ -1,11 +1,11 @@
 """Prompts for the Race Engineer agent — all natural-language text lives here.
 STARTER.
 
-============================== YOUR TIER C SURFACE ==============================
+============================== YOUR TIER E SURFACE ==============================
 The instruction below is assembled from SECTIONS. Two are yours to write —
 VOICE and CALL_TYPES — and they're what turns a database-reader into a race
 engineer. The placeholders WORK (the agent runs as shipped), but it sounds
-like a robot reading rows aloud. Your reward for Tier C is hearing the
+like a robot reading rows aloud. Your reward for Tier E is hearing the
 difference on the pit wall, out loud, in your own persona.
 
 Everything else is GIVEN and marked so. The given sections are hard-won:
@@ -39,7 +39,7 @@ E-Prix 2024 Round 10. You are on the radio with him during a live race.
 """
 
 # ============================================================================
-# TODO(C) — VOICE: yours to write.
+# TODO(E) — VOICE: yours to write.
 #
 # This section defines HOW the engineer speaks. The reference enforces all
 # of the following — write rules (in your own words) that achieve them:
@@ -90,7 +90,7 @@ _TTS_RULES = """
 """
 
 # ============================================================================
-# TODO(C) — CALL TYPES: yours to write.
+# TODO(E) — CALL TYPES: yours to write.
 #
 # The frontend fires the agent three ways; each needs a defined shape.
 # The reference defines, roughly:

@@ -172,11 +172,28 @@ gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
     --project="$PROJECT_ID" \
     --quiet --verbosity=error
 
-gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
-    --member="serviceAccount:${PUBSUB_SA}" \
-    --role="roles/iam.serviceAccountTokenCreator" \
-    --project="$PROJECT_ID" \
-    --quiet --verbosity=error
+# Service agents materialize in IAM seconds-to-tens-of-seconds AFTER
+# `services identity create` returns — and there's no existence probe for
+# them (they live in a Google-owned tenant project), so the grant itself
+# is the probe. Same 6x10s pattern as the project-level grants above.
+granted=0
+for attempt in 1 2 3 4 5 6; do
+    if gcloud iam service-accounts add-iam-policy-binding "$SA_EMAIL" \
+        --member="serviceAccount:${PUBSUB_SA}" \
+        --role="roles/iam.serviceAccountTokenCreator" \
+        --project="$PROJECT_ID" \
+        --quiet >/dev/null 2>&1; then
+        granted=1
+        break
+    fi
+    echo "    ...IAM can't see ${PUBSUB_SA} yet (service agent propagating) — retry ${attempt}/6 in 10s"
+    sleep 10
+done
+if [[ "$granted" != "1" ]]; then
+    echo "ERROR: failed to grant tokenCreator to ${PUBSUB_SA} after 6 attempts" >&2
+    exit 1
+fi
+echo "    granted roles/iam.serviceAccountTokenCreator to ${PUBSUB_SA}"
 
 # --- Create or update the push subscription ---
 echo ">>> Configuring Pub/Sub push subscription..."

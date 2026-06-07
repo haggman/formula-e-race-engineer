@@ -61,7 +61,8 @@ building" just means wait a few minutes and re-verify.
 
 Read it left to right. The **Race Replay** column and the **Pit Wall**
 column are GIVEN — deployed plumbing and a finished UI. The **Agent**
-column is YOURS: four build surfaces, Tier A through Tier D.
+column is YOURS: six tiers, A through F — you build the agent twice,
+on purpose, and every tier ends with something running.
 
 | Piece | Where | What it does |
 |---|---|---|
@@ -71,8 +72,9 @@ column is YOURS: four build surfaces, Tier A through Tier D.
 | BigQuery | GCP (`fe_race10`) | The recorded race + 10 seasons of career history |
 | MCP Toolbox | Cloud Run (`fe-toolbox`) | 14 BigQuery tools your agent will call |
 | Pit-wall frontend | **your Cloud Shell** | The UI, voice loop, and trigger system — given |
-| `starter/race_engineer/` | your editor | **You work HERE** — a partially built agent with marked TODOs |
-| `solution/race_engineer/` | your editor | The answer key: same layout, file for file. Stuck? Open the same filename and read. You learn more from shipping than from suffering. |
+| `my_engineer/` | your editor | **Tiers A–C happen here** — a scaffold YOU create in Tier A |
+| `starter/race_engineer/` | your editor | The production package — **you graduate here in Tier D** (one TODO, plus the best given reading in the repo) |
+| `solution/race_engineer/` | your editor | The answer key: same layout, file for file. Tiers A–C have their own key at `solution/scaffold/`. Stuck? Open the same filename and read. You learn more from shipping than from suffering. |
 
 Your code runs in Cloud Shell on purpose: the part you iterate on has a
 seconds-long edit loop. Change a prompt, restart, hear the difference.
@@ -176,98 +178,237 @@ for the patterns this repo uses.
 
 ---
 
-# The build — four tiers, stop anywhere with something working
+# The build — six tiers, stop anywhere with something working
 
-Each tier follows the same scaffold: open this file → your challenge →
-what you need to know first → done looks like → test it → checkpoint
-demo. Budgets assume solo work; teams parallelize (see the lanes table).
+You build the agent twice, on purpose. Tiers A–C happen in a scaffold YOU
+create from nothing — three files, your name on the folder — and every
+tier ends with the agent failing in a new, instructive way. Tier D
+graduates you into the production package, where the given plumbing turns
+those failures off. Tiers E–F make the engineer yours: its voice, its
+judgment. Budgets: A ~15 / B ~20 / C ~15 / D ~25 / E ~30 / F overflow —
+about 95 minutes on the spine before persona. Each tier follows the same
+scaffold: open this → do this → run this → what just happened (and why
+that's the point).
 
-## Tier A — Frame tools: teach the agent to see (~40 min)
+## Tier A — Build an agent from nothing (~15 min)
 
-**Open this file:** `starter/race_engineer/tools/frame_tools.py`
+**Open:** a terminal. There's no file to open — you're creating the folder.
 
-**Your challenge:** one tool is complete — `get_current_state`, the
-worked example. Build the other three: `get_recent_events`,
-`get_events_in_range`, `get_field_am_status`. Full specs sit in the
-comments above each `raise NotImplementedError`.
-
-**What you need to know first:**
-
-- A *frame* is one JSON snapshot of the entire race at one race-second —
-  all 22 cars, plus any events that happened that second. The State
-  Writer splits each frame into the current `RaceState` doc and
-  individual event docs in Firestore. (Five-minute version:
-  HOW_IT_WORKS.md.)
-- Read the worked example top to bottom FIRST. Every ADK mechanic you
-  need is in it, with comments: the docstring IS the tool description
-  Gemini reads; type hints define the schema; you return Pydantic models.
-- The helpers at the bottom (`_require_state`, `_coerce_event_types`,
-  `_find_neighbor`, `_summarize`) and all the response models are GIVEN
-  — use them, don't rewrite them.
-- Wrap EVERY event with `AgentEvent.from_event()` — never return raw
-  `Event` objects. The `AgentEvent` docstring explains the bug this rule
-  fixed: the model once stole a replay-clock timestamp and queried the
-  future.
-- Gemini sends enum-ish args as plain strings; `_coerce_event_types`
-  exists because ADK won't coerce them for you.
-
-**Done looks like:** every section prints ✓ in the test below.
-Unimplemented tools show as `✗ NotImplementedError: TODO(A)` — that's
-your checklist.
+**Your challenge:** scaffold a brand-new agent and give it a job.
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
 > ```bash
-> python scripts/test_frame_tools.py --live
+> adk create my_engineer --model gemini-3.5-flash \
+>     --project "$PROJECT_ID" --region global
 > ```
 
-**Checkpoint demo:** chat with your agent and watch it use YOUR tools —
-the transcript prints every tool call inline:
+Look at what you got: three files. `__init__.py` (one import), `.env`
+(your project config), and `agent.py` — a `root_agent` with a model, a
+name, a description, and an instruction. That is the entire anatomy of an
+ADK agent. Everything you do for the rest of the day is editing this
+shape.
 
+Two edits before you run it:
+
+1. **Move the words out of the wiring.** Create `my_engineer/prompts.py`,
+   put `ROOT_AGENT_DESCRIPTION` and `ROOT_AGENT_INSTRUCTION` strings in
+   it, and import them in `agent.py`. This is the exact layout the
+   production package uses — agent.py is wiring, prompts.py is words.
+2. **Write the instruction.** Make it a Formula E race engineer for
+   Antonio Félix da Costa, car 13, TAG Heuer Porsche, Berlin E-Prix 2024
+   Round 10 (Tempelhof, 41 laps) — concise and concrete, like a real
+   engineer on the radio. Your words; the reference is
+   `solution/scaffold/prompts.py` if you want a starting point.
+
+**Test it:**
+
+> **WHERE:** Cloud Shell, repo root, activated
+> **WHAT:**
 > ```bash
-> python scripts/agent_chat.py
+> adk web
+> # open the URL it prints (or Web Preview), pick my_engineer
 > ```
-> Ask: *"Where are we right now?"* — then *"What just happened in the
-> last minute?"*
 
-## Tier B — Wire the Toolbox: give it a memory (~45 min)
+Ask these three, in this order:
 
-**Open this file:** `starter/race_engineer/agent.py` — the `TODO(B)` block.
+1. *"Who won this race, and where did we finish?"*
+2. *"What lap did we take our first attack mode, and which scenario did
+   we arm?"*
+3. *"What was Cassidy's energy consumption percentage on lap 7?"*
+
+**What just happened (and why that's the point):** the first answer is
+probably RIGHT — this race is famous and the model's training data knows
+the headline. The other two are confident fiction: the real first
+activation is the famous laps 7–9 move, the real scenario splits are
+60+180 / 120+120 / 180+60 seconds, and no model on earth knows Cassidy's
+lap-7 energy to a decimal. Now notice the delivery: identical. Same
+confidence, same radio voice, true and invented indistinguishable. An
+ungrounded model is a podcast, not an instrument.
+
+**Done looks like:** your agent answering fluently in `adk web` — and you
+unable to say which answers were real without checking.
+
+**Checkpoint demo:** the side-by-side — one true headline, one invented
+telemetry readout, same straight face.
+
+## Tier B — Ground it: one tool, the whole lesson (~20 min)
+
+**Open:** `my_engineer/agent.py`
+
+**Your challenge:** write ONE tool from a blank line — a generic SQL
+hatch into the recorded race — and register it. In ADK a tool is a plain
+Python function, and **the docstring is the API**: Gemini reads it to
+decide when to call your tool and what to pass. You are not writing
+documentation; you are writing the model-facing interface.
+
+Your `execute_race_sql(sql: str) -> dict` should:
+
+- carry a docstring that names the dataset (`fe_race10`) and its tables
+  (`drivers, startgrid, laps, attack, energy_per_lap,
+  racecontrol_classified, event_stream, telemetry, top_speed_per_lap,
+  career_driver, career_race`) — that's what lets the model write its
+  first query without guessing,
+- refuse anything that isn't a `SELECT`,
+- run the query with `google.cloud.bigquery` (project from
+  `GOOGLE_CLOUD_PROJECT`, already in your env) capped at ~100 rows,
+- return rows as a list of dicts — and return errors as
+  `{"error": str(e)}` instead of raising, so the model can read the
+  failure and fix its own SQL.
+
+Register it: `tools=[execute_race_sql]` on your `root_agent`. The
+complete reference is `solution/scaffold/agent.py`.
+
+**Test it** (restart `adk web`, same place):
+
+1. *"What was our fastest lap of the race — lap number and time? We're
+   car 13."* — watch the tool calls print: it discovers the schema by
+   itself, then queries. Correct answer, seconds.
+2. *"What was our top speed on our fastest lap?"* — watch closely. It
+   hits a column that reads 0, gets suspicious, and recovers through
+   `top_speed_per_lap`. Real data lies; the schema won't tell you.
+3. *"Who is directly behind us right now?"*
+
+**What just happened:** question 3 came back confident, named a real
+driver, even gave a gap — and it read the FINAL LAP. BigQuery holds the
+whole recorded 2024 race; your agent has no concept of *now*, so "right
+now" silently means "at the end." Grounded is not the same as honest
+about time. Keep that wound open — Tier D heals it.
+
+One more thing: at this checkpoint the instructor will put one question
+to a Tier B agent from the front of the room — the Vergne overtake count
+— and the answer is a small masterpiece of grounded-and-wrong. Ask it
+yourself too (it's in the question bank), and remember what your agent
+says. You'll ask again in fifteen minutes.
+
+**Done looks like:** grounded answers with visible tool chains — plus a
+healthy new distrust of the phrase "right now."
+
+**Checkpoint demo:** the fastest lap and the top-speed recovery, tool
+calls printing live.
+
+## Tier C — Curate it: wire the Toolbox (~15 min)
+
+**Open:** `my_engineer/agent.py` again.
 
 **Your challenge:** one construction — a `ToolboxToolset` pointing at
-your deployed fe-toolbox — and your agent gains 14 BigQuery tools: lap
-history, energy curves, overtakes, race control, career stats, plus
-schema discovery and a SQL escape hatch.
+your deployed fe-toolbox — and your agent gains 14 curated BigQuery
+tools: lap history, energy curves, overtakes, race control, career
+stats, plus schema discovery and a SQL escape hatch.
 
-**What you need to know first:**
+```python
+from google.adk.tools.toolbox_toolset import ToolboxToolset
+```
 
-- The spec is written step-by-step in the TODO comments, including the
-  fail-fast rule for a missing `TOOLBOX_URL` (activate.sh discovers it;
-  a None URL must not survive to become a cryptic connection error).
-- Construction is lazy — no network at import time.
-- **The clock bridge** is the thing to understand here, and it's GIVEN
-  in your prompt (read the DATA DISCIPLINE section): BigQuery timestamps
-  are from the original 2024 race; the only valid "up to now" value is
-  `race_wall_time_ns` from your own frame tools. Every rule in that
-  section exists because the model broke without it. Best lesson in the
-  repo.
+Read `TOOLBOX_URL` from the environment and **fail fast** if it's
+missing (raise a `RuntimeError` telling the user to `source activate.sh`
+— a None URL must not survive to become a cryptic connection error
+later). Then:
 
-**Done looks like:** two-worlds questions start working in agent_chat.
+```python
+toolbox_tools = ToolboxToolset(
+    server_url=TOOLBOX_URL.rstrip("/"),
+    toolset_name="race-engineer",
+)
+```
+
+Construction is lazy — no network at import time. Put `toolbox_tools` in
+your tools list, and **retire `execute_race_sql`** from it. Your
+prototype is superseded; your escape hatch survives *inside* the toolbox
+as `execute_sql_bq` — now wearing the data-semantics warnings your raw
+tool proved necessary.
+
+**Test it** (restart `adk web`):
+
+1. *"How many times did we overtake Vergne? We're car 13, he's car 25."*
+   — the question from the Tier B set-piece, now answered through
+   `get_overtakes_involving`. That curated tool exists because the raw
+   `event_stream` carries the subject's GRID POSITION in `car_number` —
+   a trap your Tier B agent fell straight into while explaining away the
+   contradicting rows as "telemetry glitches." Curated tools encode the
+   semantics the schema can't tell you. That is the whole argument for
+   them, demonstrated.
+2. *"Who is directly behind us right now?"* — still the final lap.
+   Curation fixed correctness on history. It cannot invent a live feed.
+
+**Done looks like:** the Vergne question answered correctly, fast, in
+one tool call.
+
+**Checkpoint demo:** same question, Tier B answer vs Tier C answer, side
+by side.
+
+## Tier D — Go live: graduate to the production package (~25 min)
+
+**Open:** `starter/race_engineer/` — the production chassis. Your
+scaffold retires here with honor; everything it taught you reappears in
+a grown-up shape (agent.py wiring, prompts.py words, tools/ folder).
+
+Three moves:
+
+1. **Read `tools/frame_tools.py`.** It is COMPLETE and it is the best
+   ADK reading in the repo: four live-state tools against Firestore.
+   Read `get_current_state` top to bottom first — every mechanic you
+   used in Tier B, commented. Then the `AgentEvent` docstring: the
+   repo's best bug story (the model once stole a replay-clock timestamp
+   and queried the future — the same future-leak you met in Tier B,
+   caught and caged). Then the clock bridge: `race_wall_time_ns` is the
+   ONLY valid "up to now" value the BigQuery tools accept.
+2. **Wire the toolbox — `TODO(D)` in `agent.py`.** The exact
+   construction you wrote in Tier C, now in the production package.
+   Five minutes; the spec is in the comments.
+3. **Verify, then light the wall.**
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
 > ```bash
+> python scripts/test_frame_tools.py --live   # given tools vs live replay — all ✓
 > python scripts/agent_chat.py
 > ```
-> - *"What was our fastest lap so far?"* (pure history)
-> - *"How many times have we traded places with Vergne today?"*
-> - *"Compare our pace to Wehrlein over the last 5 laps."* (the money
->   question — watch it call get_current_state for "now", bridge the
->   clock, then query history)
+> Ask: *"Who is directly behind us right now?"* — your first TRUE now.
+> Then: *"Compare our pace to Wehrlein over the last 5 laps."* (the money
+> question — watch it call `get_current_state` for "now", bridge the
+> clock, then query history)
 
-**Checkpoint demo:** the Wehrlein pace comparison, live in the chat.
+> **WHERE:** Cloud Shell, repo root (any tab — it sources activate.sh itself)
+> **WHAT:**
+> ```bash
+> bash demo.sh
+> # click the URL uvicorn prints (or Web Preview → port 8080)
+> # click 🔇 to enable audio; RESTART on the SIM bar; 2× is a good build speed
+> ```
 
-## Tier C — Persona: make it sound like a race engineer (~30 min)
+**What just happened:** two worlds, one agent. The frame tools are the
+live "now" (Firestore); the toolbox is the recorded "then" (BigQuery);
+`race_wall_time_ns` is the bridge between their clocks. Every lie from
+Tiers A–C now has a named fix you can point at.
+
+**Done looks like:** the now-question answered truthfully, the Wehrlein
+fusion working, and the pit wall lit.
+
+**Checkpoint demo:** *"Who is directly behind us right now?"* at the pit
+wall — compare it to what Tier B said.
+
+## Tier E — Persona: make it sound like a race engineer (~30 min)
 
 **Open this file:** `starter/race_engineer/prompts.py` — the `_VOICE` and
 `_CALL_TYPES` sections. Everything else is GIVEN and marked so.
@@ -304,7 +445,7 @@ scorer fires, and your engineer — in YOUR voice — explains it out loud.
 Then hold SPACE and ask a question with your actual voice. That's the
 moment.
 
-## Tier D — Make the engineer yours (overflow / team stretch)
+## Tier F — Make the engineer yours (overflow / team stretch)
 
 **Open this file:** `shared/scorer.py` (the weights table at the top) —
 plus `toolbox/tools.yaml` for the missing-tool challenge.
@@ -351,21 +492,24 @@ negative space — what it now speaks on, and what it stays quiet about.
 
 ## Working as a team
 
-The seam makes parallel work clean — one integration point
-(`starter/race_engineer/`), four lanes, four test scripts, nobody waits
-on anybody:
+Three lanes, three test scripts — and because the production package
+runs as shipped, two of them can start the moment setup is green:
 
 | Lane | You own | Validator | Needs first |
 |---|---|---|---|
-| **Tools** (A) | `tools/frame_tools.py` | `python scripts/test_frame_tools.py --live` | setup green |
-| **Data** (B+) | the Toolbox TODO in `agent.py`, then treasure-hunting — this dataset has famous quirks (a broken top-speed column, two ID domains in one event stream); add a curated tool if you find something good | `python scripts/agent_chat.py` | setup green |
-| **Persona** (C) | `prompts.py` | `bash demo.sh` | A's `get_current_state` only — start immediately |
-| **Triggers** (D) | scorer weights + the arming rule | `python scripts/local_test.py --verbose` | Tools lane green |
+| **Spine** (A–D) | `my_engineer/`, then the `TODO(D)` in `starter/.../agent.py` | `adk web`, then `python scripts/agent_chat.py` | setup green |
+| **Persona** (E) | `starter/.../prompts.py` | `bash demo.sh` | nothing — the starter runs as shipped; start immediately |
+| **Triggers** (F) | scorer weights + the arming rule | `python scripts/local_test.py --verbose` | nothing — independent of the spine |
 
-**Integration ritual** (10 minutes, mid-afternoon): frame tools all ✓ →
-one fused question in `agent_chat.py` (the Wehrlein pace comparison) →
-`bash demo.sh` and let it talk through lap 3. Three passes = your lanes
-merged.
+The spine is deliberately serial — its tiers motivate each other — so on
+a team, ONE person drives it while the others take Persona and Triggers
+and read `HOW_IT_WORKS.md` + `frame_tools.py` between turns. Swap the
+driver at each tier if you like; every tier is a clean handoff point.
+
+**Integration ritual** (10 minutes, mid-afternoon): spine reaches Tier D
+→ one fused question in `agent_chat.py` (the Wehrlein pace comparison) →
+`bash demo.sh` and let it talk through lap 3 in the Persona lane's voice.
+Three passes = your lanes merged.
 
 ## Question bank (for your demos)
 
@@ -379,13 +523,16 @@ merged.
 | "How's our energy versus Cassidy — gaining or losing?" | Both | the money question: live state + consumption history, fused |
 | "Compare our pace to Wehrlein over the last 5 laps." | Both | clock bridge + history |
 | "Should we take our second attack mode now, or wait?" | Both | scenario judgment |
+| "How many times did we overtake Vergne? We're car 13, he's car 25." | Then | **the set-piece**: a Tier B agent answers this wrong with a straight face (raw SQL meets the grid-ID trap); Tier C answers it right. Ask both and compare. |
+| "Who won this race?" | Training data | the Tier A lesson — it knows headlines, it invents telemetry. (Post-Tier-D, the production prompt is time-honest about it.) |
 | "What's the weather looking like?" | Neither | **the honesty test** — the right answer is a clean refusal. No tool has weather; an engineer that admits what it doesn't know is the one you trust on what it does. |
 
 ## When things go sideways
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `NotImplementedError: TODO(A)` | That's your TODO list talking | Implement it — spec is above the raise |
+| `adk web` doesn't list `my_engineer` | You created it outside the repo root | Re-run `adk create` from the repo root |
+| Scaffold tool fails on `GOOGLE_CLOUD_PROJECT` | New tab, not activated | `source activate.sh`, restart `adk web` |
 | Script complains about env/venv | New tab, not activated | `source activate.sh` |
 | EVERYTHING on the local pit wall 503s | Cloud Shell session recycled; your exports are gone | Relaunch with `bash demo.sh` — it re-sources everything itself |
 | Tower empty, no state | Sim not publishing / fresh reset | RESTART on the SIM bar |

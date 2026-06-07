@@ -1,18 +1,17 @@
 """Frame-state tools the race engineer agent calls during reasoning.
 
-============================== YOUR TIER A SURFACE ==============================
-ONE tool below is COMPLETE — get_current_state, the worked example. Read it
-top to bottom before writing anything: it shows every ADK mechanic you need.
-THREE tools are yours to build (look for TODO(A)):
+=========================== GIVEN — YOUR TIER D READING ===========================
+All four tools below are COMPLETE, and this file is the best ADK reading
+in the repo. Your Tier D job is to read it, not write it:
 
-    get_recent_events     "what just happened?"
-    get_events_in_range   "what happened on lap N?"
-    get_field_am_status   "who has attack mode left?"
+    get_current_state     read top to bottom FIRST — every mechanic, commented
+    AgentEvent docstring  the repo's best bug story (a real future leak)
+    the other three       skim — same patterns, different questions
 
-The response models and helpers further down are GIVEN — you never write
-Pydantic under time pressure. Validate your work with:
-    python scripts/test_frame_tools.py
-(seed mode against scripts/seed_test_state.py, or --live against the replay)
+Want to BUILD one of these instead of reading it? The BONUS board has a
+"build your own frame tool" ticket. Validate the given tools against the
+live replay any time:
+    python scripts/test_frame_tools.py --live
 =============================================================================
 
 HOW ADK FUNCTION TOOLS WORK (the lessons baked into the worked example):
@@ -149,7 +148,7 @@ class FieldAmStatusResponse(BaseModel):
 
 
 # ============================================================================
-# THE WORKED EXAMPLE — complete; read before writing your tools
+# THE WORKED EXAMPLE — read this one top to bottom first
 # ============================================================================
 
 
@@ -206,7 +205,7 @@ def get_current_state() -> CurrentStateResponse:
 
 
 # ============================================================================
-# TODO(A) — your three tools
+# The other three tools — given; skim after the worked example
 # ============================================================================
 
 
@@ -229,25 +228,31 @@ def get_recent_events(
       car_involved: Only events with car_number = this value.
       limit: Cap on number of events returned (default 50).
     """
-    # ------------------------------------------------------------------
-    # TODO(A): implement. Spec:
-    #   1. types = _coerce_event_types(event_types)   (Gemini sends strings)
-    #   2. state = _require_state(); the window is
-    #        from = max(0, state.race_time_s - seconds_back)
-    #        to   = state.race_time_s
-    #   3. events = get_state_client().query_events(
-    #        from_race_time_s=..., to_race_time_s=..., event_types=types,
-    #        car_involved=car_involved, limit=limit)
-    #   4. Wrap EVERY event: [AgentEvent.from_event(e) for e in events]
-    #      (never return raw Events — see the AgentEvent docstring)
-    #   5. Return RecentEventsResponse(events=..., count=len(...),
-    #        filters_applied={...the window + filters you applied, with
-    #        event types as their string values...})
-    # The worked example above shows the fetch pattern; the reference lives
-    # at solution/race_engineer/tools/frame_tools.py if you're stuck.
-    # ------------------------------------------------------------------
-    raise NotImplementedError(
-        "TODO(A): get_recent_events — spec in the comments above this line"
+    types = _coerce_event_types(event_types)
+    state = _require_state()
+    to_race_time = state.race_time_s
+    from_race_time = max(0, to_race_time - seconds_back)
+
+    client = get_state_client()
+    events = client.query_events(
+        from_race_time_s=from_race_time,
+        to_race_time_s=to_race_time,
+        event_types=types,
+        car_involved=car_involved,
+        limit=limit,
+    )
+
+    agent_events = [AgentEvent.from_event(e) for e in events]
+    return RecentEventsResponse(
+        events=agent_events,
+        count=len(agent_events),
+        filters_applied={
+            "from_race_time_s": from_race_time,
+            "to_race_time_s": to_race_time,
+            "event_types": [t.value for t in types] if types else None,
+            "car_involved": car_involved,
+            "limit": limit,
+        },
     )
 
 
@@ -272,15 +277,26 @@ def get_events_in_range(
       car_involved: Only events with car_number = this value.
       limit: Cap on number of events returned (default 100).
     """
-    # ------------------------------------------------------------------
-    # TODO(A): implement. Same shape as get_recent_events, except the
-    # window is the caller's absolute [from_race_time_s, to_race_time_s] —
-    # no current-state fetch needed. Coerce types, query, wrap with
-    # AgentEvent.from_event, return RecentEventsResponse with
-    # filters_applied describing the window.
-    # ------------------------------------------------------------------
-    raise NotImplementedError(
-        "TODO(A): get_events_in_range — spec in the comments above this line"
+    types = _coerce_event_types(event_types)
+    client = get_state_client()
+    events = client.query_events(
+        from_race_time_s=from_race_time_s,
+        to_race_time_s=to_race_time_s,
+        event_types=types,
+        car_involved=car_involved,
+        limit=limit,
+    )
+    agent_events = [AgentEvent.from_event(e) for e in events]
+    return RecentEventsResponse(
+        events=agent_events,
+        count=len(agent_events),
+        filters_applied={
+            "from_race_time_s": from_race_time_s,
+            "to_race_time_s": to_race_time_s,
+            "event_types": [t.value for t in types] if types else None,
+            "car_involved": car_involved,
+            "limit": limit,
+        },
     )
 
 
@@ -291,29 +307,52 @@ def get_field_am_status() -> FieldAmStatusResponse:
     the scenario distribution. Use for "should I activate now?" reasoning —
     AM is most effective when the field around you is not also using it.
     """
-    # ------------------------------------------------------------------
-    # TODO(A): implement. Spec:
-    #   1. state = _require_state()
-    #   2. Walk state.cars, SKIPPING retired cars. For each, build an
-    #      AmCarStatus (round remaining_budget_s to 1 decimal) and place it
-    #      in exactly one bucket:
-    #        attack_mode.active            -> active_now
-    #        elif activations_used > 0     -> used_at_least_one
-    #        else                          -> untouched
-    #   3. Tally scenario_distribution: {scenario: car count} across the
-    #      running field.
-    #   4. Sort each bucket by position (readability for the model).
-    #   5. Return FieldAmStatusResponse with race_phase (its .value),
-    #      race_time_s, and race_wall_time_ns via race_time_to_wall_ns —
-    #      this tool is one of the TWO valid through_time_ns sources.
-    # ------------------------------------------------------------------
-    raise NotImplementedError(
-        "TODO(A): get_field_am_status — spec in the comments above this line"
+    state = _require_state()
+
+    active_now: list[AmCarStatus] = []
+    used: list[AmCarStatus] = []
+    untouched: list[AmCarStatus] = []
+    scenario_dist: dict[int, int] = {}
+
+    for car in state.cars:
+        if car.is_retired:
+            continue
+        status = AmCarStatus(
+            car_number=car.car_number,
+            driver_short_name=car.driver_short_name,
+            position=car.position,
+            active_now=car.attack_mode.active,
+            activations_used=car.attack_mode.activations_used,
+            scenario=car.attack_mode.scenario,
+            remaining_budget_s=round(car.attack_mode.remaining_budget_s, 1),
+        )
+        if car.attack_mode.active:
+            active_now.append(status)
+        elif car.attack_mode.activations_used > 0:
+            used.append(status)
+        else:
+            untouched.append(status)
+        scenario_dist[car.attack_mode.scenario] = (
+            scenario_dist.get(car.attack_mode.scenario, 0) + 1
+        )
+
+    # Sort by position for readability
+    for bucket in (active_now, used, untouched):
+        bucket.sort(key=lambda s: s.position)
+
+    return FieldAmStatusResponse(
+        active_now=active_now,
+        used_at_least_one=used,
+        untouched=untouched,
+        scenario_distribution=scenario_dist,
+        race_phase=state.race_phase.value,
+        race_time_s=state.race_time_s,
+        race_wall_time_ns=race_time_to_wall_ns(state.race_time_s),
     )
 
 
 # ============================================================================
-# Helpers — GIVEN, don't edit (use them in your tools)
+# Helpers — shared by the tools above
 # ============================================================================
 
 

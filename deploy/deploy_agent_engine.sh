@@ -42,14 +42,29 @@ if [[ -n "$RESOURCE" ]]; then
     echo "$RESOURCE"
 
     echo "== Granting the Agent Engine service agent Firestore access =="
-    # The service agent is created by the first deploy, so granting AFTER
-    # the deploy always works (and is idempotent on updates).
+    # The service agent is created by the first deploy; the multi-minute
+    # engine create has so far been an accidental propagation wait, but
+    # that's the same optimism Findings #8/#12/#13 punished — retry like
+    # every other grant (service agents have no existence probe; the
+    # grant IS the probe).
     PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
     ENGINE_SA="service-${PROJECT_NUMBER}@gcp-sa-aiplatform-re.iam.gserviceaccount.com"
-    gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-        --member="serviceAccount:${ENGINE_SA}" \
-        --role="roles/datastore.user" \
-        --condition=None --quiet >/dev/null
+    granted=0
+    for attempt in 1 2 3 4 5 6; do
+        if gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+            --member="serviceAccount:${ENGINE_SA}" \
+            --role="roles/datastore.user" \
+            --condition=None --quiet >/dev/null 2>&1; then
+            granted=1
+            break
+        fi
+        echo "    ...IAM can't see ${ENGINE_SA} yet (service agent propagating) — retry ${attempt}/6 in 10s"
+        sleep 10
+    done
+    if [[ "$granted" != "1" ]]; then
+        echo "ERROR: failed to grant datastore.user to ${ENGINE_SA} after 6 attempts" >&2
+        exit 1
+    fi
     echo "Granted roles/datastore.user to ${ENGINE_SA}"
 else
     echo "!! Could not parse the resource name from the deploy output."

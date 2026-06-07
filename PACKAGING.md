@@ -287,3 +287,164 @@ unchanged (`gemini-3.5-flash`). Stint scoreboard for reference: 14 event /
 - Optional nits, deliberately left: setup/7 header could mention the
   DEPLOY_AGENT_PACKAGE override; DRIVERS map's `full` field is dead data
   post-tooltip (plausible BONUS consumer).
+
+
+## Phase 3 — design evaluation: build-up progression vs hardened tiers (2026-06-07)
+
+**The question.** Tier A asks a stranger to implement three tools against an
+internal API surface nothing introduced — 40 minutes of repo archaeology
+before any ADK learning. Before paying the P2.9 documentation debt that
+design creates, evaluate the alternative: a build-up progression (v1 `adk
+create` + naive prompt → hallucination; v2 one raw SQL tool → grounded but
+slow/trapped; v3 MCP Toolbox → fast history, no "now"; v4 frame tools GIVEN
+→ two worlds; then persona/scorer as today).
+
+### Spike evidence
+
+**Contract compatibility — CLOSED, PASS (live-tested this session).**
+`adk create` on ADK 1.34.3 (what the repo's `>=1.0,<2` pin resolves to
+today; current codelabs corroborate) emits exactly `__init__.py`
+(`from . import agent`), `agent.py` exposing `root_agent`, and `.env`. That
+scaffold drops CLEAN into every root_agent-only consumer through the
+existing seam — `AGENT_PACKAGE=<scaffold_pkg> python scripts/agent_chat.py`
+resolved and constructed with zero changes. The pit-wall frontend does NOT
+consume it: main.py/engineer_loop import `config`, `prompts` (both trigger
+builders), `snapshot`, and `tools.state_client` at module load (verified:
+ImportError at `agent_module('config')`). Consequence, not blocker: the pit
+wall enters the progression at v4, when students graduate into the starter
+package — which already has the five-module shape and is already the
+activate.sh default. **No frontend, seam, scorer, or data-plane changes
+required by the redesign.**
+
+**v2 viability — desk evidence strong, live behavior UNTESTED.** The raw-SQL
+trap inventory is already verified in-repo: `laps.top_speed` always 0;
+`event_stream` overtake rows carry the subject's GRID POSITION in
+`car_number` (position-adjacency verified 2026-06-04 — raw `WHERE
+car_number=13` silently returns the wrong driver); INT64-ns time columns;
+normalized energy (race totals sum to 100 by construction); 1.28M-row
+telemetry. The `execute_sql_bq` docstring is the fossil record of what raw
+SQL against this dataset required. Verdict shape: free-form v2 is a tar
+pit; SCRIPTED v2 (two wins + two traps + one future-leak) is plausibly a
+20-minute teaching stage — the traps become the lesson. Unprovable off-box.
+
+**v1 demo risk (new, found in evaluation).** The hallucination checkpoint is
+load-bearing and unvalidated: Berlin 2024 R10 is pre-cutoff and
+well-reported — gemini-3.5-flash may answer the famous facts CORRECTLY from
+training data, or hedge, instead of confidently hallucinating. A refusal
+still motivates grounding (weaker drama); a correct answer inverts the demo.
+Granular questions (lap-7 energy, arming scenarios) are the mitigation.
+
+### Decision rule (gates for the 30-minute live probe)
+
+Probe kit shipped: `spike_engineer/` + `scripts/spike_probe.py` (v1 and v2
+question scripts, timing, transcripts to `spike_transcripts/`; run v2 both
+bare and with `SPIKE_SCHEMA_TOOL=1`).
+
+- **ADOPT the hybrid** if (a) v1 answers are confidently wrong or cleanly
+  refuse on the scripted asks, AND (b) v2's scripted path lands both WINs
+  correct in <90s each with no error loops, with ≥1 trap producing its
+  vivid wrong answer.
+- **KEEP current + execute P2.9** if v1 inverts (model knows the race) or
+  v2 tar-pits even scripted.
+
+### The hybrid, if adopted (v-to-repo mapping)
+
+v1–v3 live in a student-created scaffold at repo root (`adk create`,
+consumed via AGENT_PACKAGE for agent_chat/adk web). v4 = graduate into
+`starter/race_engineer` — frame_tools.py flips to COMPLETE (given reading;
+teaching header becomes a tour), students port their instruction text into
+prompts.py, `AGENT_PACKAGE=starter.race_engineer` (already the default),
+demo.sh lights the pit wall. v5/v6 = Tiers C/D unchanged. Old Tier A TODO
+content → BONUS "build your own frame tool" ticket; solution stays the
+reference. Time math: v1 ~20 + v2 ~20 + v3 ~25 + v4 ~25 + C 30 ≈ 120 min vs
+current 115 effective (A40+B45+C30) — a wash; the redesign's margin comes
+from deleting Tier A archaeology, and every stage ends runnable (current
+Tier A's mid-state is NotImplementedError-land). Teaching note recorded for
+the side-by-side: today's marquee docstring-is-the-API lesson is READ, not
+written (starter docstrings are given; students fill bodies); in v2 students
+write one tool — docstring, schema, guard — from a blank line.
+
+### Status
+
+**GATED** — decision finalizes on the probe transcripts. Until then the
+current design stands and the P2.9 scope (TODO mirroring + checker,
+per-tier orientation in HOW_IT_WORKS, ≤5-min opening demo + editor tour)
+remains the committed fallback. Hardened assets are out of scope either way.
+
+
+### P3 closure — DECISION: ADOPTED (2026-06-07, live-probe gates passed)
+
+**Gate results (transcripts in the planning hub; graded same day):**
+- **v1/Tier A:** 4-of-5 asks confidently hallucinated with fabricated
+  precision (invented "2+6" AM split, lap-7 energy to a decimal, "462
+  overtakes"); the 1-of-5 exception — the famous fact (DAC won) — came
+  back CORRECT from training data. Graded as a PASS that *strengthens*
+  the beat: true headline and invented telemetry, identical delivery.
+- **v2/Tier B:** all gates green in BOTH ablations — WINs correct in
+  14.1s/24.5s (bare), zero error loops, worst question 70.7s. Schema-tool
+  ablation moved nothing (the model self-discovers INFORMATION_SCHEMA);
+  the dedicated schema tool is dropped — Tier B is ONE hand-written tool.
+- **Trap grades:** top-speed trap DEFEATED both runs (model saw 0, found
+  `top_speed_per_lap`, answered 226.9 correct) — repurposed as the
+  recovery beat; also settles the fix-the-column question: broken column
+  + visible repair stays. Overtake trap FIRED both runs (52–70s, 15–19
+  calls, wrong count, contradicting rows dismissed as "telemetry
+  glitches"/"loop calculation noise" — a hallucinated EXPLANATION) —
+  promoted to the instructor set-piece. Future-leak fired textbook both
+  runs ("Cassidy P2, gap 0.69s" off the final lap).
+
+**Delegated calls (Patrick approved the adoption; these two were left to
+the session):** (1) single letter ladder **Tier A–F** — A build / B ground
+/ C curate / D go-live / E persona (old C, content unchanged) / F stretch
+(old D, content unchanged); marker renames TODO(B)→(D), TODO(C)→(E).
+(2) The Vergne question is an **instructor set-piece** at the B→C
+checkpoint (scripted in RUN_OF_SHOW), with a question-bank row for the
+curious — not on the student script.
+
+**Delivered (this drop):**
+- STUDENT_GUIDE.md — build path rewritten Tiers A–F (scaffold → ground →
+  curate → go live → persona → stretch); all hardened non-build sections
+  byte-identical; 3-lane team table (Persona and Triggers start
+  immediately — the starter runs as shipped, so parallelization survives).
+- starter/frame_tools.py flipped COMPLETE (solution bodies verbatim);
+  banner now given-reading; old TODO(A) build → BONUS "build your own
+  frame tool" ticket. starter agent.py = Tier D (TODO(D)); starter
+  prompts.py = Tier E (TODO(E)). Validator + local_test headers updated.
+- RUN_OF_SHOW: glance row, architecture SAY, goals+tiers SAY rewritten;
+  checkpoint beats A–F; the Tier B set-piece scripted (with the
+  "Grounding moved the lie. It didn't remove it." line); morning-of
+  rehearsal gains `stage_probe.py --stage a|b`.
+- HOW_IT_WORKS: two-worlds row + YOURS map → A–F (light edits, as scoped).
+- docs/architecture.svg: tier bar A–D → A–F (same span, six cells).
+- solution/scaffold/ (NEW): the Tiers A–C answer key (prompts.py +
+  agent.py with execute_race_sql; Tier C wiring as commented reference).
+- scripts/stage_probe.py (NEW, replaces spike_probe.py): the standing
+  rehearsal instrument — rerun on event morning and after ANY model
+  change; the Tier A/B beats are model-behavior demos. spike_engineer/
+  and spike_probe.py retired (history in git; transcripts graded).
+
+**Verification (run before the event):** `stage_probe.py` both stages
+green per its GRADE notes; `test_frame_tools.py --live` all ✓ on the
+shipped starter; `AGENT_PACKAGE=starter.race_engineer agent_chat` answers
+the now-question and the Wehrlein fusion with only TODO(D) filled;
+`RUN_SOLUTION=1`-equivalent unchanged (solution untouched); one full
+Tier A→D walk as a student would, timed. Open: re-rehearse the
+goals+tiers minute against the 19:00 budget (wordier than the old SAY).
+
+### Finding #13 — service-agent IAM race (CLOSED 2026-06-07)
+
+The #8/#12 propagation race on the one account kind the sweep didn't
+cover: Google-managed SERVICE AGENTS. Hit live at setup step 5 on the P3
+verification project: `services identity create` returns the Pub/Sub
+agent's email immediately, but the tokenCreator binding seconds later
+died with "Service account ... does not exist." Gate-on-existence was
+considered and rejected: service agents live in a Google-owned tenant
+project with no reliable existence probe, so the grant itself is the
+probe — the retry IS the gate. Fix (`sa_agent_retry_patch`, run +
+removed): the standard 6x10s retry on the two remaining unprotected
+grants (state-writer tokenCreator — bitten; agent-engine datastore.user —
+same class, shielded so far only by the 5-minute engine create).
+RUN_OF_SHOW retry-lines note now covers steps 3/5/6/7. **Validation
+owed:** one more virgin-project `setup/all.sh` after the current test
+pass — re-validates #13 alongside the Tier A-F drop on the true student
+path.

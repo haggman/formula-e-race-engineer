@@ -50,6 +50,20 @@ the demo payoff — no solutions. Sizes: **[S]** < 20 min · **[M]** 30–45 min
 
 ---
 
+### [M] Build your own frame tool
+- **Surface:** `starter/race_engineer/tools/frame_tools.py` (+
+  `scripts/test_frame_tools.py` as your checklist).
+- **Spec:** the four given tools arrived complete in Tier D — now earn
+  one. Either pick one of the three event/AM tools, delete its body (keep
+  the docstring — it's the API), and reimplement it against live Firestore
+  via `get_state_client()`; or design a NEW one (`get_gap_to_leader`?).
+  The response models and helpers at the bottom of the file are your
+  toolkit. One law: wrap every event with `AgentEvent.from_event()` —
+  read that docstring for the future-leak story before you start.
+- **Payoff:** the docstring-is-the-API lesson with a live system on the
+  other end — and `test_frame_tools.py --live` flips ✗→✓ the moment
+  you're green.
+
 ## VOICE & DATA
 
 ### [S] Portuguese radio

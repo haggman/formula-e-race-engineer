@@ -57,7 +57,7 @@ time to see a real, complete frame.
 | | **Now** (Firestore) | **Then** (BigQuery) |
 |---|---|---|
 | What | Current RaceState + recent events | Every lap, overtake, AM event, energy curve, RC message, plus 10 seasons of careers |
-| Reached via | your **frame tools** (Tier A) | **MCP Toolbox** tools (wired in Tier B) |
+| Reached via | the **frame tools** (given — your Tier D reading) | **MCP Toolbox** tools (wired in Tiers C and D) |
 | Clock | `race_time_s` — seconds since the green flag | INT64 **nanoseconds since epoch, on the original 2024 race's wall clock** |
 
 Those two clocks are the most important subtlety in the repo. To ask
@@ -121,22 +121,22 @@ interleave as they happen.
 
 ## The file map
 
-**YOURS — the four build surfaces:**
+**YOURS — the six tiers:**
 
 | Tier | File | What you do there |
 |---|---|---|
-| A | `starter/race_engineer/tools/frame_tools.py` | build 3 frame tools (1 is the worked example) |
-| B | `starter/race_engineer/agent.py` | wire the ToolboxToolset |
-| C | `starter/race_engineer/prompts.py` | write `_VOICE` and `_CALL_TYPES` |
-| D | `shared/scorer.py` (+ `toolbox/tools.yaml`) | tune weights, add the arming rule, add a tool |
+| A–C | `my_engineer/` (you create it in Tier A) | scaffold an agent, ground it with one raw SQL tool, then curate it with the Toolbox |
+| D | `starter/race_engineer/agent.py` (+ `tools/frame_tools.py` as reading) | wire the ToolboxToolset (`TODO(D)`); read the given frame tools |
+| E | `starter/race_engineer/prompts.py` | write `_VOICE` and `_CALL_TYPES` |
+| F | `shared/scorer.py` (+ `toolbox/tools.yaml`) | tune weights, add the arming rule, add a tool |
 
 **READ THESE — given, but worth your time:**
 
 - `starter/race_engineer/prompts.py`, the GIVEN sections — every rule in
   DATA DISCIPLINE and HONESTY exists because the model broke without it.
-- `starter/race_engineer/tools/frame_tools.py`, the worked example and
-  the `AgentEvent` docstring — the repo's ADK patterns and its best bug
-  story.
+- `starter/race_engineer/tools/frame_tools.py` — all four tools,
+  complete; the worked example and the `AgentEvent` docstring are the
+  repo's ADK patterns and its best bug story.
 - `shared/models.py` — the Pydantic contract for RaceState/Event; the
   single source of truth both the State Writer and your tools share.
 - `toolbox/tools.yaml` — what the 14 BigQuery tools actually run; the
