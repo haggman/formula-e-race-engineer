@@ -8,7 +8,10 @@ Students drive themselves from `STUDENT_GUIDE.md`; your job is the opening
 20 minutes, the checkpoints, and the wrap.
 
 **The one thing students need from you on a board/slide:** the tinyurl to
-the rendered STUDENT_GUIDE on GitHub. `TINYURL: https://tinyurl.com/FE-Hack-2`
+the rendered STUDENT_GUIDE on GitHub. `TINYURL: ______________` *(create it
+event-morning if it doesn't exist: tinyurl.com → paste the GitHub URL of
+STUDENT_GUIDE.md → custom alias; then fill the placeholder at the top of
+the guide too).*
 
 ## The day at a glance
 
