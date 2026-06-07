@@ -63,11 +63,27 @@ fi
 
 # --- IAM grants ---
 echo ">>> Granting roles..."
-# Pub/Sub publisher
-gcloud pubsub topics add-iam-policy-binding "$TOPIC_NAME" \
-    --member="serviceAccount:${SA_EMAIL}" \
-    --role="roles/pubsub.publisher" \
-    --project="$PROJECT_ID" >/dev/null
+# Pub/Sub publisher. New SAs can take tens of seconds to propagate into
+# IAM on a fresh project — retry instead of dying on "Service account ...
+# does not exist". (Finding #12: the same propagation race the other
+# deploy scripts handle; this topic-level binding was the missed surface.)
+granted=0
+for attempt in 1 2 3 4 5 6; do
+    if gcloud pubsub topics add-iam-policy-binding "$TOPIC_NAME" \
+        --member="serviceAccount:${SA_EMAIL}" \
+        --role="roles/pubsub.publisher" \
+        --project="$PROJECT_ID" >/dev/null 2>&1; then
+        granted=1
+        break
+    fi
+    echo "    ...IAM can't see ${SA_EMAIL} yet (new SA propagating) — retry ${attempt}/6 in 10s"
+    sleep 10
+done
+if [[ "$granted" != "1" ]]; then
+    echo "ERROR: failed to grant roles/pubsub.publisher to ${SA_EMAIL} after 6 attempts" >&2
+    exit 1
+fi
+echo "    granted roles/pubsub.publisher"
 
 # Frames bucket: gs://class-demo is PUBLIC-READ (allUsers objectViewer),
 # so no per-SA grant is needed — and a cross-project student account
