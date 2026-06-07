@@ -1,4 +1,4 @@
-<!-- TINYURL: ______________________  (instructor: create a tinyurl pointing at
+<!-- TINYURL: https://tinyurl.com/FE-Hack-2 (instructor: create a tinyurl pointing at
      this file's GitHub page and write ONLY that on the board/slide) -->
 
 # Build a Formula E Race Engineer
