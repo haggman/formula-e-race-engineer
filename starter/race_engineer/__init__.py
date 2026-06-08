@@ -1,13 +1,8 @@
-"""Exposes root_agent for `adk web` discovery — best-effort.
+"""Package marker — intentionally bare as shipped.
 
-# GIVEN — infrastructure, don't edit. Same guard as the reference: the
-# eager import below is ONLY for `adk web`, which discovers agents by
-# importing the package. Environments without google-adk or TOOLBOX_URL
-# (e.g. the slim engine-mode frontend container) must not crash on package
-# import, so we import the agent module only when both are present.
+Your agent doesn't exist yet: Tier A's `adk create starter/race_engineer`
+writes agent.py (and replaces this file with `from . import agent`). Until
+then, nothing may import `.agent` here — step-0 verification reaches the
+given plumbing (config, tools.*) through this package, and it must import
+cleanly with no agent present.
 """
-import importlib.util
-import os
-
-if importlib.util.find_spec("google.adk") is not None and os.environ.get("TOOLBOX_URL"):
-    from starter.race_engineer import agent  # noqa: F401 — exposes root_agent for adk web

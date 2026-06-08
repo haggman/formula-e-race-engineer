@@ -448,3 +448,55 @@ RUN_OF_SHOW retry-lines note now covers steps 3/5/6/7. **Validation
 owed:** one more virgin-project `setup/all.sh` after the current test
 pass — re-validates #13 alongside the Tier A-F drop on the true student
 path.
+
+### P3.1 — the one-agent in-place build (2026-06-07, Patrick's design)
+
+**Decision:** students `adk create` INTO `starter/race_engineer` and grow
+ONE `agent.py` from Tier A to the pit wall — no scaffold-then-graduate.
+Instructions go through **three generations**: Gen 1 inline at A, Gen 2 =
+link the production prompt at D, Gen 3 = persona at E. Rationale: the
+P3 my_engineer design made students build a toy, retire it, and switch
+folders; this keeps every line they write in the thing that ships.
+
+**Evidence (tested live, ADK 1.34.3):** `adk create` into a non-empty
+folder prompts `Override existing content? [y/N]`; `y` writes its three
+files and PRESERVES non-colliding content (tools/, prompts.py survive) —
+the y-prompt is now a scripted teachable moment. Nested path
+`adk create starter/race_engineer` works. `adk web` from repo root lists
+only `starter` (one-level scan); `adk web starter` lists `race_engineer`
+— guide command settled. Frontend contract scan: the seam loads config/
+prompts/snapshot/tools.state_client/agent from AGENT_PACKAGE — all
+absolute `starter.race_engineer` imports already correct in place; zero
+seam/frontend changes.
+
+**Strip (this drop):** `starter/race_engineer/agent.py` DELETED (students
+create it; answer keys: `solution/scaffold/agent.py` for A–C shape,
+`solution/race_engineer/agent.py` for final). Shipped `__init__.py` is
+now a bare stub (the old guarded agent-import would die at step-0 verify
+with no agent.py; adk create writes the real one). `.gitignore` covers
+the adk-written `.env`. `solution/scaffold/prompts.py` removed — the
+scaffold key is now inline-shape, constants importable by stage_probe.
+
+**Accepted tradeoffs (Patrick):** Triggers lane starts after the spine's
+`adk create` (~minute 3); Persona lane drafts during A–C and goes LIVE at
+the Tier D prompt link (~minute 55) — the team's one agent runs Gen 1
+until then. Note: post-create, the student `__init__.py` is adk's
+unguarded `from . import agent` (the shipped guard is gone) — local-only
+consequence, all imports satisfied in an activated shell; students never
+deploy their package.
+
+**Delivered:** STUDENT_GUIDE build path reworked (in-place create with
+the y-moment, Gen 1 inline, `adk web starter`, Tier D = adopt: register
+frame tools + link Gen 2; lanes + troubleshooting updated);
+RUN_OF_SHOW goals+tiers SHOW+SAY rewritten (one-agent arc, svg tier-bar
+pointer), what-you-have + Tier A beat touched; HOW_IT_WORKS map +
+two-worlds row; architecture.svg agent cards reworked to the journey
+(A–C build·ground·curate / D adopt / E persona / F stretch — the
+`starter/race_engineer/` path label is literally true again);
+scaffold reference + stage_probe aligned to the inline shape.
+
+**Verification:** the timed Tier A→D walk (now exercises create-into-
+folder + y + `adk web starter` + the adoption); stage_probe both stages
+(unchanged behavior expected — same Gen-1 words, same tool); virgin-
+project `setup/all.sh` re-validation still owed (also covers Finding
+#13).

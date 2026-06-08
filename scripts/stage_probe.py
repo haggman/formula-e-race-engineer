@@ -59,17 +59,18 @@ from google.adk.runners import InMemoryRunner  # noqa: E402
 from google.genai import types  # noqa: E402
 
 from solution.scaffold import agent as scaffold_agent  # noqa: E402
-from solution.scaffold import prompts as scaffold_prompts  # noqa: E402
 
 if ARGS.stage == "b":
     root_agent = scaffold_agent.root_agent  # as shipped: one raw SQL tool
 else:
-    # Tier A condition: same prompt, zero tools — Gemini's own knowledge.
+    # Tier A condition: same Gen-1 instruction, zero tools — Gemini's own
+    # knowledge. (The constants live in scaffold agent.py precisely so this
+    # probe can import them; students write the same words inline.)
     root_agent = Agent(
         name="race_engineer",
         model=scaffold_agent.MODEL,
-        description=scaffold_prompts.ROOT_AGENT_DESCRIPTION,
-        instruction=scaffold_prompts.ROOT_AGENT_INSTRUCTION,
+        description=scaffold_agent.ROOT_AGENT_DESCRIPTION,
+        instruction=scaffold_agent.ROOT_AGENT_INSTRUCTION,
     )
 
 APP_NAME = "stage_probe"

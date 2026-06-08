@@ -57,7 +57,7 @@ time to see a real, complete frame.
 | | **Now** (Firestore) | **Then** (BigQuery) |
 |---|---|---|
 | What | Current RaceState + recent events | Every lap, overtake, AM event, energy curve, RC message, plus 10 seasons of careers |
-| Reached via | the **frame tools** (given — your Tier D reading) | **MCP Toolbox** tools (wired in Tiers C and D) |
+| Reached via | the **frame tools** (given — your Tier D reading) | **MCP Toolbox** tools (wired once, in Tier C — the wiring rides to the wall) |
 | Clock | `race_time_s` — seconds since the green flag | INT64 **nanoseconds since epoch, on the original 2024 race's wall clock** |
 
 Those two clocks are the most important subtlety in the repo. To ask
@@ -125,8 +125,8 @@ interleave as they happen.
 
 | Tier | File | What you do there |
 |---|---|---|
-| A–C | `my_engineer/` (you create it in Tier A) | scaffold an agent, ground it with one raw SQL tool, then curate it with the Toolbox |
-| D | `starter/race_engineer/agent.py` (+ `tools/frame_tools.py` as reading) | wire the ToolboxToolset (`TODO(D)`); read the given frame tools |
+| A–C | `starter/race_engineer/agent.py` (Tier A creates it, in place, via `adk create`) | build your agent around the given chassis: Gen-1 prompt inline, one raw SQL tool, then the Toolbox |
+| D | the same `agent.py` (+ `tools/frame_tools.py` as reading) | adopt the given parts: register the frame tools, link the production prompt (Gen 2) |
 | E | `starter/race_engineer/prompts.py` | write `_VOICE` and `_CALL_TYPES` |
 | F | `shared/scorer.py` (+ `toolbox/tools.yaml`) | tune weights, add the arming rule, add a tool |
 

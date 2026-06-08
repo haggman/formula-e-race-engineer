@@ -44,3 +44,6 @@ htmlcov/
 deploy/.engine_resource
 
 spike_transcripts/
+
+# adk create writes a per-project .env into the student agent folder
+starter/race_engineer/.env

@@ -61,8 +61,8 @@ building" just means wait a few minutes and re-verify.
 
 Read it left to right. The **Race Replay** column and the **Pit Wall**
 column are GIVEN — deployed plumbing and a finished UI. The **Agent**
-column is YOURS: six tiers, A through F — you build the agent twice,
-on purpose, and every tier ends with something running.
+column is YOURS: one agent, built in place across six tiers — never
+thrown away, and its instructions alone go through three generations.
 
 | Piece | Where | What it does |
 |---|---|---|
@@ -72,9 +72,8 @@ on purpose, and every tier ends with something running.
 | BigQuery | GCP (`fe_race10`) | The recorded race + 10 seasons of career history |
 | MCP Toolbox | Cloud Run (`fe-toolbox`) | 14 BigQuery tools your agent will call |
 | Pit-wall frontend | **your Cloud Shell** | The UI, voice loop, and trigger system — given |
-| `my_engineer/` | your editor | **Tiers A–C happen here** — a scaffold YOU create in Tier A |
-| `starter/race_engineer/` | your editor | The production package — **you graduate here in Tier D** (one TODO, plus the best given reading in the repo) |
-| `solution/race_engineer/` | your editor | The answer key: same layout, file for file. Tiers A–C have their own key at `solution/scaffold/`. Stuck? Open the same filename and read. You learn more from shipping than from suffering. |
+| `starter/race_engineer/` | your editor | **Your agent's home, start to finish** — Tier A creates `agent.py` here with `adk create`; the given chassis (config, the production prompt file, the live-state tools) is already inside, waiting |
+| `solution/race_engineer/` | your editor | The answer key: same layout, file for file. The Tiers A–C shape of `agent.py` has its own key at `solution/scaffold/agent.py`. Stuck? Open the same filename and read. You learn more from shipping than from suffering. |
 
 Your code runs in Cloud Shell on purpose: the part you iterate on has a
 seconds-long edit loop. Change a prompt, restart, hear the difference.
@@ -178,56 +177,65 @@ for the patterns this repo uses.
 
 ---
 
-# The build — six tiers, stop anywhere with something working
+# The build — six tiers, one agent, never thrown away
 
-You build the agent twice, on purpose. Tiers A–C happen in a scaffold YOU
-create from nothing — three files, your name on the folder — and every
-tier ends with the agent failing in a new, instructive way. Tier D
-graduates you into the production package, where the given plumbing turns
-those failures off. Tiers E–F make the engineer yours: its voice, its
-judgment. Budgets: A ~15 / B ~20 / C ~15 / D ~25 / E ~30 / F overflow —
-about 95 minutes on the spine before persona. Each tier follows the same
-scaffold: open this → do this → run this → what just happened (and why
-that's the point).
+You build ONE agent, in the production folder, from the first command to
+the pit wall. Tiers A–C run fast in `adk web`, and every one ends with
+your agent failing in a new, instructive way; Tier D adopts the given
+plumbing that's been sitting in your folder all along and lights the
+wall; E–F make the engineer yours. Along the way your instructions go
+through **three generations**: Gen 1, your own words, inline, at Tier A;
+Gen 2, the hardened production prompt you link in at Tier D — after
+you've watched your agent earn every rule in it; Gen 3, your voice on
+top, at Tier E. Budgets: A ~15 / B ~20 / C ~15 / D ~25 / E ~30 / F
+overflow — about 75 minutes from nothing to the pit wall. Each tier
+follows the same scaffold: open this → do this → run this → what just
+happened (and why that's the point).
 
-## Tier A — Build an agent from nothing (~15 min)
+## Tier A — Build your agent (~15 min)
 
-**Open:** a terminal. There's no file to open — you're creating the folder.
+**Open:** a terminal. Your agent doesn't exist yet — but its home does.
 
-**Your challenge:** scaffold a brand-new agent and give it a job.
+**Your challenge:** create your agent inside the production folder, around
+the plumbing that's already waiting for it.
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
 > ```bash
-> adk create my_engineer --model gemini-3.5-flash \
+> adk create starter/race_engineer --model gemini-3.5-flash \
 >     --project "$PROJECT_ID" --region global
+> # ADK will ask: "Non-empty folder already exist ... Override existing
+> # content? [y/N]" — say y. The folder isn't empty because your given
+> # chassis (config, the production prompt file, the live-state tools) is
+> # already in it. ADK adds its three files alongside and touches nothing
+> # else.
 > ```
 
-Look at what you got: three files. `__init__.py` (one import), `.env`
-(your project config), and `agent.py` — a `root_agent` with a model, a
-name, a description, and an instruction. That is the entire anatomy of an
-ADK agent. Everything you do for the rest of the day is editing this
-shape.
+Look at `starter/race_engineer/agent.py` — what you got is a `root_agent`
+with a model, a name, a description, and an instruction. Four fields.
+That is the entire anatomy of an ADK agent, and **this file is the one
+you'll grow all day**: every tier between here and the pit wall is an
+edit to it. (`__init__.py` and `.env` came along too; the rest of the
+folder — `config.py`, `prompts.py`, `snapshot.py`, `tools/` — is the
+given chassis. Leave it alone until Tier D; it'll be ready when you are.)
 
-Two edits before you run it:
+Two edits:
 
-1. **Move the words out of the wiring.** Create `my_engineer/prompts.py`,
-   put `ROOT_AGENT_DESCRIPTION` and `ROOT_AGENT_INSTRUCTION` strings in
-   it, and import them in `agent.py`. This is the exact layout the
-   production package uses — agent.py is wiring, prompts.py is words.
-2. **Write the instruction.** Make it a Formula E race engineer for
-   Antonio Félix da Costa, car 13, TAG Heuer Porsche, Berlin E-Prix 2024
-   Round 10 (Tempelhof, 41 laps) — concise and concrete, like a real
-   engineer on the radio. Your words; the reference is
-   `solution/scaffold/prompts.py` if you want a starting point.
+1. Rename the agent: `name="race_engineer"`.
+2. **Generation 1 of your instructions** — write them straight into the
+   `instruction=` string: a Formula E race engineer for Antonio Félix da
+   Costa, car 13, TAG Heuer Porsche, Berlin E-Prix 2024 Round 10
+   (Tempelhof, 41 laps) — concise and concrete, like a real engineer on
+   the radio. Your words; the reference is `solution/scaffold/agent.py`
+   if you want a starting point.
 
 **Test it:**
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
 > ```bash
-> adk web
-> # open the URL it prints (or Web Preview), pick my_engineer
+> adk web starter
+> # open the URL it prints (or Web Preview), pick race_engineer
 > ```
 
 Ask these three, in this order:
@@ -254,7 +262,7 @@ telemetry readout, same straight face.
 
 ## Tier B — Ground it: one tool, the whole lesson (~20 min)
 
-**Open:** `my_engineer/agent.py`
+**Open:** `starter/race_engineer/agent.py` — the same file.
 
 **Your challenge:** write ONE tool from a blank line — a generic SQL
 hatch into the recorded race — and register it. In ADK a tool is a plain
@@ -279,7 +287,7 @@ Your `execute_race_sql(sql: str) -> dict` should:
 Register it: `tools=[execute_race_sql]` on your `root_agent`. The
 complete reference is `solution/scaffold/agent.py`.
 
-**Test it** (restart `adk web`, same place):
+**Test it** (restart `adk web starter`, same place):
 
 1. *"What was our fastest lap of the race — lap number and time? We're
    car 13."* — watch the tool calls print: it discovers the schema by
@@ -309,7 +317,7 @@ calls printing live.
 
 ## Tier C — Curate it: wire the Toolbox (~15 min)
 
-**Open:** `my_engineer/agent.py` again.
+**Open:** `starter/race_engineer/agent.py` — still the same file.
 
 **Your challenge:** one construction — a `ToolboxToolset` pointing at
 your deployed fe-toolbox — and your agent gains 14 curated BigQuery
@@ -333,12 +341,14 @@ toolbox_tools = ToolboxToolset(
 ```
 
 Construction is lazy — no network at import time. Put `toolbox_tools` in
-your tools list, and **retire `execute_race_sql`** from it. Your
+your tools list, and **retire `execute_race_sql`** from it. Unlike your
+raw tool, this wiring is permanent: the ToolboxToolset you just
+constructed rides this same file all the way to the pit wall. Your
 prototype is superseded; your escape hatch survives *inside* the toolbox
 as `execute_sql_bq` — now wearing the data-semantics warnings your raw
 tool proved necessary.
 
-**Test it** (restart `adk web`):
+**Test it** (restart `adk web starter`):
 
 1. *"How many times did we overtake Vergne? We're car 13, he's car 25."*
    — the question from the Tier B set-piece, now answered through
@@ -357,13 +367,12 @@ one tool call.
 **Checkpoint demo:** same question, Tier B answer vs Tier C answer, side
 by side.
 
-## Tier D — Go live: graduate to the production package (~25 min)
+## Tier D — Adopt the production parts: go live (~25 min)
 
-**Open:** `starter/race_engineer/` — the production chassis. Your
-scaffold retires here with honor; everything it taught you reappears in
-a grown-up shape (agent.py wiring, prompts.py words, tools/ folder).
+**Open:** the same `agent.py` — plus, finally, the rest of your folder.
 
-Three moves:
+Your agent has been living next to its production chassis all day. Three
+moves, and the first one is reading:
 
 1. **Read `tools/frame_tools.py`.** It is COMPLETE and it is the best
    ADK reading in the repo: four live-state tools against Firestore.
@@ -373,10 +382,38 @@ Three moves:
    and queried the future — the same future-leak you met in Tier B,
    caught and caged). Then the clock bridge: `race_wall_time_ns` is the
    ONLY valid "up to now" value the BigQuery tools accept.
-2. **Wire the toolbox — `TODO(D)` in `agent.py`.** The exact
-   construction you wrote in Tier C, now in the production package.
-   Five minutes; the spec is in the comments.
-3. **Verify, then light the wall.**
+2. **Register the frame tools** — the same move you made for your SQL
+   tool in Tier B, four tools at once:
+
+   ```python
+   from starter.race_engineer.tools.frame_tools import (
+       get_current_state,
+       get_recent_events,
+       get_events_in_range,
+       get_field_am_status,
+   )
+   ```
+
+   and add all four to your `tools` list, alongside the ToolboxToolset
+   you wired in Tier C.
+3. **Generation 2 of your instructions** — link the production prompt:
+
+   ```python
+   from starter.race_engineer.prompts import (
+       ROOT_AGENT_DESCRIPTION,
+       ROOT_AGENT_INSTRUCTION,
+   )
+   ```
+
+   and point `description=` and `instruction=` at them, retiring your
+   inline Gen 1. Before you make the swap, read what you're adopting:
+   the DATA DISCIPLINE and HONESTY sections of `prompts.py`. Every rule
+   in them is a fix for a lie you personally watched this week — the
+   invented telemetry, the time-dishonest "right now," the explanation
+   your agent made up for data it couldn't reconcile. (Generation 3 —
+   the voice — is Tier E, and it goes in the same file you just linked.)
+
+**Verify, then light the wall:**
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
@@ -397,10 +434,11 @@ Three moves:
 > # click 🔇 to enable audio; RESTART on the SIM bar; 2× is a good build speed
 > ```
 
-**What just happened:** two worlds, one agent. The frame tools are the
-live "now" (Firestore); the toolbox is the recorded "then" (BigQuery);
-`race_wall_time_ns` is the bridge between their clocks. Every lie from
-Tiers A–C now has a named fix you can point at.
+**What just happened:** two worlds, one agent — YOUR agent, the same
+file from minute one. The frame tools are the live "now" (Firestore);
+the toolbox is the recorded "then" (BigQuery); `race_wall_time_ns` is
+the bridge between their clocks. Every lie from Tiers A–C now has a
+named fix you can point at, and nothing you built today got thrown away.
 
 **Done looks like:** the now-question answered truthfully, the Wehrlein
 fusion working, and the pit wall lit.
@@ -492,19 +530,19 @@ negative space — what it now speaks on, and what it stays quiet about.
 
 ## Working as a team
 
-Three lanes, three test scripts — and because the production package
-runs as shipped, two of them can start the moment setup is green:
+Three lanes, three test scripts, one agent:
 
 | Lane | You own | Validator | Needs first |
 |---|---|---|---|
-| **Spine** (A–D) | `my_engineer/`, then the `TODO(D)` in `starter/.../agent.py` | `adk web`, then `python scripts/agent_chat.py` | setup green |
-| **Persona** (E) | `starter/.../prompts.py` | `bash demo.sh` | nothing — the starter runs as shipped; start immediately |
-| **Triggers** (F) | scorer weights + the arming rule | `python scripts/local_test.py --verbose` | nothing — independent of the spine |
+| **Spine** (A–D) | `starter/race_engineer/agent.py` — one file, four tiers | `adk web starter`, then `python scripts/agent_chat.py` | setup green |
+| **Persona** (E) | `prompts.py` — DRAFT during A–C (read the GIVEN sections, write your `_VOICE` and `_CALL_TYPES` against the TODO(E) specs); your words go LIVE the moment the spine links the production prompt | `bash demo.sh` | spine reaches Tier D (to hear it) |
+| **Triggers** (F) | scorer weights + the arming rule | `python scripts/local_test.py --verbose` | the spine's `adk create` — the first three minutes |
 
 The spine is deliberately serial — its tiers motivate each other — so on
-a team, ONE person drives it while the others take Persona and Triggers
-and read `HOW_IT_WORKS.md` + `frame_tools.py` between turns. Swap the
-driver at each tier if you like; every tier is a clean handoff point.
+a team, ONE person drives it while the others draft Persona, tune
+Triggers, and read `HOW_IT_WORKS.md` + `frame_tools.py` between turns.
+Swap the driver at each tier if you like; every tier is a clean handoff
+point.
 
 **Integration ritual** (10 minutes, mid-afternoon): spine reaches Tier D
 → one fused question in `agent_chat.py` (the Wehrlein pace comparison) →
@@ -531,8 +569,10 @@ Three passes = your lanes merged.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `adk web` doesn't list `my_engineer` | You created it outside the repo root | Re-run `adk create` from the repo root |
-| Scaffold tool fails on `GOOGLE_CLOUD_PROJECT` | New tab, not activated | `source activate.sh`, restart `adk web` |
+| `adk web` lists `starter`, not `race_engineer` | It scans one level down | Run `adk web starter` from the repo root |
+| `agent_chat`/`local_test`: ImportError on `...race_engineer.agent` | Your agent doesn't exist until Tier A's `adk create` | It's the first command of the build |
+| Ran `demo.sh` before Tier D | It runs — but with Gen 1 prompts and no frame tools, it sounds wrong | Not broken; come back after the Tier D adoption |
+| Your SQL tool fails on `GOOGLE_CLOUD_PROJECT` | New tab, not activated | `source activate.sh`, restart `adk web starter` |
 | Script complains about env/venv | New tab, not activated | `source activate.sh` |
 | EVERYTHING on the local pit wall 503s | Cloud Shell session recycled; your exports are gone | Relaunch with `bash demo.sh` — it re-sources everything itself |
 | Tower empty, no state | Sim not publishing / fresh reset | RESTART on the SIM bar |

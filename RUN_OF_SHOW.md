@@ -159,26 +159,35 @@ live 'now' in Firestore. Bottom right — also given: the same race's full
 history, plus ten seasons of careers, in BigQuery behind fourteen query
 tools. Right column — given: this pit wall, the voice loop, and the trigger
 system that decides when to speak. The middle column is YOURS: the agent —
-six tiers. Build it from nothing, ground it, curate it, take it live, give
-it a voice, tune its judgment. Each tier ends with something you can demo."
+six tiers, one folder. Build it from nothing around the given chassis,
+ground it, curate it, adopt the production parts and go live, give it a
+voice, tune its judgment. Each tier ends with something you can demo."
 **WHY:** ownership boundaries kill the #1 time-sink (reverse-engineering
 the plumbing). Point at file paths on the cards — they're real.
 
 ### 15:00–19:00 — Goals + tiers
 
-**SAY:** "Tier A, fifteen minutes: `adk create`, a prompt, and an agent
-that answers everything — and you'll prove you can't trust a word of it.
-Tier B, twenty: you write ONE tool, a raw SQL hatch into the recorded
-race, and it gets grounded — grounded and still wrong in a way I'll show
-you live. Tier C, fifteen: one construction wires in fourteen curated
-tools and the wrongness gets fixed. Tier D, twenty-five: you graduate
-into the production package, read the given live-world tools, wire the
-toolbox there, and your agent hits the pit wall knowing what NOW means.
-Tier E, thirty: persona — your engineer, your voice, out loud. Tier F is
-yours to play: trigger weights, a new strategic rule, a missing tool.
-Every tier ends with something running. Stop anywhere and you still demo
-something real. Teams: there's a lanes table — persona and triggers can
-start immediately, don't serialize the room.
+**SHOW:** keep `docs/architecture.svg` up from the last segment — point
+at the tier bar across the bottom as you walk the letters, and at the
+agent column: that one folder is where their whole day happens.
+
+**SAY:** "Tier A, fifteen minutes: `adk create` — straight into the
+production folder, around given plumbing that's already sitting there —
+and a prompt in your own words. You'll prove you can't trust a word it
+says. Tier B, twenty: you write ONE tool, a raw SQL hatch into the
+recorded race, and it gets grounded — grounded and still wrong in a way
+I'll show you live. Tier C, fifteen: one construction wires in fourteen
+curated tools and the wrongness gets fixed — and that wiring rides to
+the finish. Tier D, twenty-five: you adopt the parts that were waiting
+in your folder all along — register the given live-state tools, link
+the hardened prompt, generation two of your instructions — and the same
+file you created at minute one hits the pit wall knowing what NOW
+means. Tier E, thirty: persona — generation three, your engineer, your
+voice, out loud. Tier F is yours to play: trigger weights, a new
+strategic rule, a missing tool. One agent, never thrown away. Stop
+anywhere and you still demo something real. Teams: there's a lanes
+table — triggers can start minutes in; persona drafts early and goes
+live at D.
 
 And hear this clearly: `solution/` is the answer key, same layout file for
 file — your Tiers A–C key is `solution/scaffold/` — and using it is
@@ -200,8 +209,8 @@ it's in your editor. Go build."
 - **First 15 min:** sweep for `bash setup/verify.sh` green lights. A ✗
   names its own fix; "indexes building" just means wait.
 - **Checkpoint beats** (call them out as the room reaches them; each is a
-  STUDENT_GUIDE "Checkpoint demo"): **Tier A** — someone's scaffold
-  confidently inventing attack-mode scenarios next to a true headline.
+  STUDENT_GUIDE "Checkpoint demo"): **Tier A** — someone's day-one
+  agent confidently inventing attack-mode scenarios next to a true headline.
   **Tier B** — the fastest lap and the top-speed recovery, tool calls
   printing live; then YOUR set-piece (below). **Tier C** — the Vergne
   question turning correct. **Tier D** — the room's first true "who's
