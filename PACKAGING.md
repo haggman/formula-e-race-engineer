@@ -540,3 +540,44 @@ explanation / grounded-but-wrong." Truer now — Tier B raw SQL *undercounts*
 (lap-end diffing misses mid-lap trades; one run answered "just the once");
 the 5/6 total was real all along. Set-piece reframed: B = undercount,
 C = complete count.
+
+### Finding #15 — time-honesty leaked through the un-time-bounded lap tools (CLOSED 2026-06-08)
+
+Surfaced in pre-handover testing on a fresh project. Asked mid-race ("who
+wins this race?" on lap 12; "what happens on lap 35?"), the deployed agent
+answered with full-race / future facts instead of refusing — the
+time-honesty property was broken. It reproduced across a restart AND across
+a model swap (gemini-3.5-flash → gemini-2.5-flash), which ruled out the
+obvious suspects.
+
+Root cause is structural, not a regression: time-honesty is HARD-enforced
+only on the timestamp-parameterized tools (get_overtakes_involving,
+get_recent_race_control, get_am_activations, get_am_armings) — they take
+through_time_ns and physically can't return events past "now". But the
+lap-INDEXED history tools (get_field_position_at_lap, get_lap_history,
+get_top_speed_history, get_energy_curve) take a raw lap number with NO time
+guard, so they will happily return lap 41 while the replay is on lap 12.
+The agent's trace showed it answering "who wins" by calling
+get_field_position_at_lap(41) directly. Honesty on those tools was resting
+entirely on the prompt + the model's restraint; current Gemini snapshots
+don't hold that line (and "who wins" is also recallable from training — a
+famous race). The live state itself was perfect: get_current_state returned
+current_lap=12 with race_wall_time_ns = RACE_START_EPOCH_NS + 748s exactly,
+so the time-bridge was never implicated.
+
+Fix (prompt only): added a "Do not look ahead" rule to the DATA DISCIPLINE
+section of BOTH solution/race_engineer/prompts.py and
+starter/race_engineer/prompts.py — never call the four lap-indexed tools
+for a lap beyond current_lap (no lap_end / through_lap / lap_number past
+it), and refuse "who wins" / final-result / unreached-lap questions while
+the race is still running. Verified: agent refuses mid-race and stops
+calling get_field_position_at_lap(41); past/current-lap queries unaffected.
+No model pin needed (the fix is model-independent). Engine-path note: the
+deployed Agent Engine must be redeployed (deploy/deploy_agent_engine.sh) to
+pick up the new prompt; local agent_chat / adk web read it on restart.
+
+Residual: the guard is prompt-enforced, not a data gate — the lap tools can
+still physically return any lap. Watch it across runs and future model
+churn. The bulletproof version is a hard "max lap = current_lap" clamp on
+those four tools (a real code change, deferred unless the prompt guard
+proves flaky).

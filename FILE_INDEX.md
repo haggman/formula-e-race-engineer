@@ -15,6 +15,7 @@ just the files you touch — you don't need this map.)
 | `HOW_IT_WORKS.md` | Architecture deep-dive — how the data plane, agent, and frontend fit together. |
 | `BONUS.md` | The Tier F stretch board: optional extensions for teams that finish early. |
 | `PACKAGING.md` | Living Phase-2 record — packaging decisions and findings for the deliverer. |
+| `SMOKE_TEST.md` | ~15-min validation pass for a fresh deployment (setup gate + agent/time-honesty/overtake/pit-wall checks). |
 
 ## Setup & deploy
 

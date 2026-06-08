@@ -39,6 +39,9 @@ You need: the data plane, the deployed engine, and the public pit-wall URL
 > python scripts/stage_probe.py --stage b   # rehearse Tier B + the set-piece (~5 min)
 > ```
 
+For a fuller end-to-end check of a fresh deployment, run through
+`SMOKE_TEST.md` — the ~15-min validation pass.
+
 Measured timings (fresh resourced project, 2026-06-06):
 
 | Step | Measured | Notes |

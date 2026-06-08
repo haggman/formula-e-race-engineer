@@ -17,6 +17,7 @@ trigger system, and build the agent in the middle.
 | **Running the event** | [`RUN_OF_SHOW.md`](RUN_OF_SHOW.md) — morning-of, the 20-min opening, checkpoints |
 | **Demoing the system** | [`DEMO.md`](DEMO.md) — choreography, question bank, Attack Mode explainer |
 | **Working on the packaging** | [`PACKAGING.md`](PACKAGING.md) — the living Phase 2 record, decisions, and findings |
+| **Testing a fresh deploy** | [`SMOKE_TEST.md`](SMOKE_TEST.md) — a ~15-min validation pass for a clean project |
 | **Lost in the repo** | [`FILE_INDEX.md`](FILE_INDEX.md) — every file and folder, one line each |
 
 ## Quick start
