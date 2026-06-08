@@ -267,16 +267,28 @@ tools:
     kind: bigquery-sql
     source: bq-fe-race10
     description: |
-      Overtakes involving a specific car — either as the car making/losing
-      the move or as the other participant. Both participants are resolved
-      to real car numbers and driver codes. Returns time, both drivers,
-      position_change from the subject's perspective (negative = subject
-      gained the place), and a human-readable summary. Use this to assess
-      battles around a driver.
+      Overtakes involving a specific car. Call this for ANY question about
+      overtakes, passes, or position battles — it is the AUTHORITATIVE
+      record, resolved to real car numbers and driver codes. Do NOT answer
+      overtake questions by reconstructing passes from lap positions, lap
+      standings, or lap-time windows: those are lap-end snapshots and miss
+      mid-lap moves. Count ONLY from the rows this tool returns.
+
+      For a head-to-head BETWEEN TWO cars (e.g. "how many times did 13
+      overtake 25"), pass other_car_number to get the complete record for
+      that pair. To count, use the direction_for_query_car field:
+      'query_car_passed_other' means car_number made the pass;
+      'other_passed_query_car' means car_number was passed. (position_change
+      is from each row's own subject perspective; direction_for_query_car
+      normalizes it to car_number so you can tally directly.)
     parameters:
       - name: car_number
         type: integer
         description: "Real car number, e.g. 13 for our driver"
+      - name: other_car_number
+        type: integer
+        default: 0
+        description: "Optional. The other car in a head-to-head question (e.g. 25 for Vergne). Omit (or 0) for all overtakes involving car_number."
       - name: through_time_ns
         type: integer
         description: "Wall-clock time in nanoseconds since epoch (2024 race clock). Only events at or before this time."
@@ -289,12 +301,21 @@ tools:
         other_driver_short_name,
         position_change,
         at_loop,
-        human_summary
+        human_summary,
+        CASE
+          WHEN car_number = @car_number AND position_change < 0 THEN 'query_car_passed_other'
+          WHEN car_number = @car_number AND position_change > 0 THEN 'other_passed_query_car'
+          WHEN other_car_number = @car_number AND position_change > 0 THEN 'query_car_passed_other'
+          WHEN other_car_number = @car_number AND position_change < 0 THEN 'other_passed_query_car'
+        END AS direction_for_query_car
       FROM `fe_race10.v_overtakes`
-      WHERE (car_number = @car_number OR other_car_number = @car_number)
-        AND event_time <= @through_time_ns
+      WHERE event_time <= @through_time_ns
+        AND (car_number = @car_number OR other_car_number = @car_number)
+        AND (@other_car_number = 0
+             OR car_number = @other_car_number
+             OR other_car_number = @other_car_number)
       ORDER BY event_time DESC
-      LIMIT 50
+      LIMIT 200
 
   get_driver_career_stats:
     kind: bigquery-sql

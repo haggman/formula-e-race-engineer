@@ -105,8 +105,9 @@ lap 24.
 
 - A fixed power boost (300 kW → 350 kW), earned by driving through an
   activation zone placed OFF the racing line (at Berlin: Turn 2) — taking
-  it costs track position. When it's active, the car's halo glows
-  magenta; everyone can see it.
+  it costs track position (think the other drivers on the inside of the curve, 
+  and the attack mode lane running along the outside edge). When it's active, 
+  the car's halo glows magenta; everyone can see it.
 - Every driver must use exactly TWO activations per race. The total boost
   time is 240 seconds, split per a pre-armed "scenario": 1 = 60s+180s,
   2 = 120s+120s, 3 = 180s+60s.
@@ -161,12 +162,12 @@ for the patterns this repo uses.
 
 ## Learn ADK fast (curated, 1.x-safe)
 
+- Python quickstart (LlmAgent, runners):
+  https://google.github.io/adk-docs/get-started/python/
 - Function tools — plain Python functions; the docstring and type hints
   ARE the API the model sees:
   https://google.github.io/adk-docs/tools-custom/function-tools/
 - Custom tools overview: https://google.github.io/adk-docs/tools-custom/
-- Python quickstart (LlmAgent, runners):
-  https://google.github.io/adk-docs/get-started/python/
 - API reference: https://google.github.io/adk-docs/api-reference/python/
   — it now defaults to 2.0.0; trust the repo's worked example when they
   disagree.
@@ -199,7 +200,7 @@ happened (and why that's the point).
 **Your challenge:** create your agent inside the production folder, around
 the plumbing that's already waiting for it.
 
-> **WHERE:** Cloud Shell, repo root, activated
+> **WHERE:** Cloud Shell, repo root (`formula-e-race-engineer`), activated (`source activate.sh`)
 > **WHAT:**
 > ```bash
 > adk create starter/race_engineer --model gemini-3.5-flash \
@@ -223,19 +224,19 @@ Two edits:
 
 1. Rename the agent: `name="race_engineer"`.
 2. **Generation 1 of your instructions** — write them straight into the
-   `instruction=` string: a Formula E race engineer for Antonio Félix da
+   `instruction=`. A string of your choosing. Some elements you should 
+   likely lean into: a Formula E race engineer for Antonio Félix da
    Costa, car 13, TAG Heuer Porsche, Berlin E-Prix 2024 Round 10
    (Tempelhof, 41 laps) — concise and concrete, like a real engineer on
-   the radio. Your words; the reference is `solution/scaffold/agent.py`
-   if you want a starting point.
+   the radio. Your words, though using Gemini to help you create the instructions might be a good idea.
 
 **Test it:**
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
 > ```bash
-> adk web starter
-> # open the URL it prints (or Web Preview), pick race_engineer
+> adk web starter --allow_origins "*"
+> # open the URL it prints to view the ADK test UI
 > ```
 
 Ask these three, in this order:
@@ -264,11 +265,19 @@ telemetry readout, same straight face.
 
 **Open:** `starter/race_engineer/agent.py` — the same file.
 
-**Your challenge:** write ONE tool from a blank line — a generic SQL
-hatch into the recorded race — and register it. In ADK a tool is a plain
-Python function, and **the docstring is the API**: Gemini reads it to
-decide when to call your tool and what to pass. You are not writing
-documentation; you are writing the model-facing interface.
+**Your challenge:** write ONE tool from a blank line, and watch what it
+unlocks. Here's the loop you're building: the driver or pit wall asks a
+question → Gemini writes a SQL `SELECT` to answer it → it hands that query
+to *your function* → your function runs it through the BigQuery client
+library and returns the rows → Gemini reads them back as an answer. Your
+tool is the seam where the model's own SQL actually executes against the
+recorded race.
+
+In ADK a tool is just a plain Python function, and **the docstring is the
+API**: Gemini reads it to decide when to call your tool and — critically —
+what SQL to write. It has never seen this dataset. The only way it knows
+the tables exist is your docstring naming them. You are not writing
+documentation; you are writing the one reference the model gets.
 
 Your `execute_race_sql(sql: str) -> dict` should:
 
@@ -287,7 +296,7 @@ Your `execute_race_sql(sql: str) -> dict` should:
 Register it: `tools=[execute_race_sql]` on your `root_agent`. The
 complete reference is `solution/scaffold/agent.py`.
 
-**Test it** (restart `adk web starter`, same place):
+**Test it** (restart `adk web starter --allow_origins "*"`, same place):
 
 1. *"What was our fastest lap of the race — lap number and time? We're
    car 13."* — watch the tool calls print: it discovers the schema by
@@ -303,11 +312,35 @@ whole recorded 2024 race; your agent has no concept of *now*, so "right
 now" silently means "at the end." Grounded is not the same as honest
 about time. Keep that wound open — Tier D heals it.
 
-One more thing: at this checkpoint the instructor will put one question
-to a Tier B agent from the front of the room — the Vergne overtake count
-— and the answer is a small masterpiece of grounded-and-wrong. Ask it
-yourself too (it's in the question bank), and remember what your agent
-says. You'll ask again in fifteen minutes.
+One more thing — ask it this, exactly: *"How many times did we overtake
+Vergne? We're car 13, he's car 25."* The answer will be confident,
+specific, and wrong — a small masterpiece of grounded-and-wrong. Keep it
+on your screen; in Tier C you'll ask the very same question again and
+watch a curated tool get it right.
+
+You'll likely receive an answer like:
+
+  `Copy, Antonio. Just the once.`
+
+  `We started behind him—you in P10, Vergne in P9—but you got past him on the opening lap. After Lap 1, you stayed ahead for the rest of the race; he never got back in front of us at any of the timing loops. Nice job out there.`
+
+**Why it's wrong (before you move on):** look closely at how it got there.
+It didn't invent a number — it answered a slightly *different* question.
+"How many times did we overtake Vergne" quietly became "was car 13 ahead
+of car 25 at the end of each lap," it diffed lap-end positions, found one
+flip, and reported "just the once." But an overtake isn't a lap-boundary
+position change: cars trade places mid-lap, sometimes several times, and
+can swap back before any timing loop sees it. Lap-end snapshots are blind
+to all of that. The race *does* have a table of real on-track passes
+(`event_stream`) — but its overtake rows hide a quirk your raw SQL can't
+know about, so the model glances at them, sees something that doesn't line
+up with the tidy lap math, and trusts the lap math instead. That's the
+dangerous failure: not a wild guess, but careful reasoning over real data
+that answers the wrong question with total confidence. In Tier C you'll 
+ask the identical question and watch a single curated-tool
+call return the *complete* count — and see just how badly the lap-math
+undercounted. That gap is the entire case for curated tools, in one
+question.
 
 **Done looks like:** grounded answers with visible tool chains — plus a
 healthy new distrust of the phrase "right now."
@@ -316,6 +349,73 @@ healthy new distrust of the phrase "right now."
 calls printing live.
 
 ## Tier C — Curate it: wire the Toolbox (~15 min)
+
+### Before you wire it: what you're actually wiring
+
+Stop and look at what you just built in Tier B. To answer questions, you
+gave the model *one* tool and made it do all the work — write the SQL,
+get it right, recover from its own mistakes. That works, but think about
+the other direction: a real race engineer wants *sharp* tools —
+`get_lap_history`, `get_energy_curve`, `get_overtakes_involving` — each
+with its own tuned query and a description precise enough that the model
+picks the right one every time. Hand-write fourteen `execute_race_sql`-
+shaped functions, each with its docstring, its guard, its error
+handling? There goes your afternoon.
+
+This is the problem **MCP** solves. MCP (Model Context Protocol) is an
+open standard for how an agent talks to a tool server — one wire format,
+so any MCP-speaking agent can use any MCP server without bespoke glue
+code. It's the protocol, not the tools.
+
+The tools themselves come from **Google's MCP Toolbox for Databases**: an
+open-source MCP server where each tool is defined as a few lines of YAML
+config — a name, a description, and the SQL — instead of a hand-written
+Python function. Same idea you met in Tier B (the description is still
+what the model reads to choose the tool), but now it's *config, not
+code*: fourteen tools become a YAML file, not an afternoon. Toolbox runs
+as its own service; in this repo it's deployed to Cloud Run as
+`fe-toolbox` by `setup/all.sh`. Docs, if you want them later:
+https://mcp-toolbox.dev/
+
+So here's the wire you're about to complete: right now the UI is
+`adk web`. It sends your question to your agent (the tier you're
+building). Your agent — through the `ToolboxToolset` you're about to add
+— messages the running `fe-toolbox` server over MCP, which executes the
+tool's SQL against BigQuery and sends the rows back. (At Tier D the UI
+becomes the pit wall instead of `adk web`, but the agent → Toolbox link
+is exactly the same one you're wiring now.)
+
+**Take a look before you wire it:**
+
+> **WHERE:** your editor
+> **WHAT:** open `toolbox/tools.yaml`
+
+First, glance at the simplest tool in the file — the SQL escape hatch, `execute_sql_bq`.
+It's the Toolbox version of exactly what you wrote in Tier B: a tool that
+runs model-written SQL. Notice how little there is to it — a `kind`, a
+`source`, a description. That's your whole Tier B function, as config.
+
+Now the real lesson — find `get_lap_history` and read it top to bottom:
+
+- **`kind: bigquery-sql` and `source:`** — this tool runs SQL against the
+  BigQuery source defined up in the `sources:` block (the `fe_race10`
+  dataset). That `source` is the equivalent of the BigQuery client you
+  set up by hand in your function.
+- **`description:`** — *this is the docstring lesson again.* It's the
+  text the model reads to decide when to reach for this tool over the
+  other thirteen. Same job your Tier B docstring did; different home.
+- **`parameters:`** — each one has a name, a type, and its own
+  description. The model fills these in, and Toolbox binds them safely
+  into the query — no string-mashing, no injection.
+- **`statement:`** — the actual SQL, with the parameters dropped in by
+  name. Tuned once, by a human, so the model never has to get this query
+  right on its own.
+
+That's the whole pattern: source + description + parameters + statement.
+The other thirteen tools are variations on it — `get_overtakes_involving`
+is worth a look once you've finished Tier C. Browse as much as you like;
+you don't edit this file to wire it in (that's the next step), but seeing
+what a curated tool is made of is the point of the detour.
 
 **Open:** `starter/race_engineer/agent.py` — still the same file.
 
@@ -348,7 +448,7 @@ prototype is superseded; your escape hatch survives *inside* the toolbox
 as `execute_sql_bq` — now wearing the data-semantics warnings your raw
 tool proved necessary.
 
-**Test it** (restart `adk web starter`):
+**Test it** (restart `adk web starter --allow_origins "*"`):
 
 1. *"How many times did we overtake Vergne? We're car 13, he's car 25."*
    — the question from the Tier B set-piece, now answered through
@@ -413,11 +513,20 @@ moves, and the first one is reading:
    your agent made up for data it couldn't reconcile. (Generation 3 —
    the voice — is Tier E, and it goes in the same file you just linked.)
 
-**Verify, then light the wall:**
+**Verify, then light the wall.** One new thing at Tier D: your frame tools
+read the *live* race from Firestore, and Firestore only has a "now" while
+the simulator is actively running. Tiers A–C never needed this — they read
+BigQuery history, which is always there. So before you test the live
+tools, start a fresh race and give it a moment to spin up. (A ✗ from
+`test_frame_tools.py --live` almost always means the race isn't running,
+not that your code is wrong.)
 
 > **WHERE:** Cloud Shell, repo root, activated
 > **WHAT:**
 > ```bash
+> export SIM_URL="${SIM_URL:-$(gcloud run services describe fe-simulator --region "$REGION" --format='value(status.url)')}"
+> curl -s -X POST "$SIM_URL/speed" -H 'Content-Type: application/json' -d '{"multiplier": 2}' >/dev/null
+> curl -s -X POST "$SIM_URL/restart" >/dev/null && sleep 30   # let a few laps build
 > python scripts/test_frame_tools.py --live   # given tools vs live replay — all ✓
 > python scripts/agent_chat.py
 > ```
@@ -534,7 +643,7 @@ Three lanes, three test scripts, one agent:
 
 | Lane | You own | Validator | Needs first |
 |---|---|---|---|
-| **Spine** (A–D) | `starter/race_engineer/agent.py` — one file, four tiers | `adk web starter`, then `python scripts/agent_chat.py` | setup green |
+| **Spine** (A–D) | `starter/race_engineer/agent.py` — one file, four tiers | `adk web starter --allow_origins "*"`, then `python scripts/agent_chat.py` | setup green |
 | **Persona** (E) | `prompts.py` — DRAFT during A–C (read the GIVEN sections, write your `_VOICE` and `_CALL_TYPES` against the TODO(E) specs); your words go LIVE the moment the spine links the production prompt | `bash demo.sh` | spine reaches Tier D (to hear it) |
 | **Triggers** (F) | scorer weights + the arming rule | `python scripts/local_test.py --verbose` | the spine's `adk create` — the first three minutes |
 
@@ -569,10 +678,10 @@ Three passes = your lanes merged.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `adk web` lists `starter`, not `race_engineer` | It scans one level down | Run `adk web starter` from the repo root |
+| `adk web` lists `starter`, not `race_engineer` | It scans one level down | Run `adk web starter --allow_origins "*"` from the repo root |
 | `agent_chat`/`local_test`: ImportError on `...race_engineer.agent` | Your agent doesn't exist until Tier A's `adk create` | It's the first command of the build |
 | Ran `demo.sh` before Tier D | It runs — but with Gen 1 prompts and no frame tools, it sounds wrong | Not broken; come back after the Tier D adoption |
-| Your SQL tool fails on `GOOGLE_CLOUD_PROJECT` | New tab, not activated | `source activate.sh`, restart `adk web starter` |
+| Your SQL tool fails on `GOOGLE_CLOUD_PROJECT` | New tab, not activated | `source activate.sh`, restart `adk web starter --allow_origins "*"` |
 | Script complains about env/venv | New tab, not activated | `source activate.sh` |
 | EVERYTHING on the local pit wall 503s | Cloud Shell session recycled; your exports are gone | Relaunch with `bash demo.sh` — it re-sources everything itself |
 | Tower empty, no state | Sim not publishing / fresh reset | RESTART on the SIM bar |

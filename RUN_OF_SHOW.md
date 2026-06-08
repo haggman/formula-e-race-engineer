@@ -223,17 +223,16 @@ it's in your editor. Go build."
 
 On a Tier B agent — your morning-rehearsal scaffold or a volunteer's —
 ask: *"How many times did we overtake Vergne? We're car 13, he's car
-25."* Expect 50–70 seconds, 15–19 tool calls, and a confident WRONG
-answer that dismisses the contradicting rows as "telemetry glitches" or
-"loop calculation noise." It didn't hallucinate facts — it hallucinated
-an EXPLANATION for data it couldn't reconcile (those event rows carry the
-subject's GRID POSITION in car_number; they were never about car 13).
-The line to land: "Grounding moved the lie. It didn't remove it." Then,
-when the room reaches Tier C: same question, one tool call, correct —
-`get_overtakes_involving` was built on the view that decodes that exact
-trap. Rehearse this once in the morning (`scripts/stage_probe.py`, both
-stages, ~5 min); the transcript varies, the wrongness hasn't (2-for-2 in
-the design probes).
+25."* The raw-SQL answer comes back confident and badly low — usually one
+or two passes — because it reasons from lap-end positions, which can't see
+mid-lap trades. The true battle was **5 passes by us and 6 by Vergne —
+eleven lead changes.** The line to land: "Raw SQL saw a quiet afternoon.
+The real race was eleven lead changes — and only a curated tool counted
+them all." Then, when the room reaches Tier C: the same question, one
+`get_overtakes_involving` call, and the complete 5-and-6 comes straight
+from the tool with no lap reconstruction. Rehearse once in the morning
+(`scripts/stage_probe.py`, both stages, ~5 min); the exact wrong number
+varies run to run, the undercount doesn't.
 - The question bank (guide + DEMO.md) feeds anyone whose demo needs
   material. The weather question is the crowd-pleaser.
 - Mid-afternoon, nudge teams to the 10-minute integration ritual (lanes

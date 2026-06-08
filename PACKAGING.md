@@ -500,3 +500,43 @@ folder + y + `adk web starter` + the adoption); stage_probe both stages
 (unchanged behavior expected — same Gen-1 words, same tool); virgin-
 project `setup/all.sh` re-validation still owed (also covers Finding
 #13).
+
+### Finding #14 — get_overtakes_involving truncated the battle it was named for (CLOSED 2026-06-07)
+
+Surfaced in the P3.1 run-through on the Tier B→C set-piece ("how many times
+did we overtake Vergne? 13 vs 25"). The curated tool returned only the 50
+most-recent overtakes involving car 13 (single-car param, no pair filter,
+`ORDER BY event_time DESC LIMIT 50`), truncating the full DAC–JEV history to
+a tail. Ground truth from `v_overtakes` (whole view, both perspectives):
+**DAC passed JEV 5×, JEV passed DAC 6× — eleven lead changes.**
+
+Two consequences, both now fixed:
+- **Tier C wasn't actually winning.** The agent reached 5/6 only by
+  abandoning the tool and reconstructing from lap-time windows + raw SQL —
+  the right answer by the wrong, unreliable method. The "curated tool gets
+  it right in one call" reveal was a fiction riding on the model's
+  freelancing.
+- **The subject asymmetry was unhandled.** `v_overtakes` records each pass
+  ONCE from the subject's side, so a DAC-over-JEV pass appears as either
+  (car=13, change<0) OR (car=25, change>0). A correct pair count needs both
+  directions; the model couldn't be expected to know that.
+
+Fix (tools.yaml; tool count unchanged at 14 — all "14 tools" copy stays
+valid): optional `other_car_number` (default 0) with a both-perspectives
+pair filter; `LIMIT 50`→`200` (kills truncation in single-car mode too);
+normalized `direction_for_query_car` column so counting is one field-match;
+description rewritten to mark the tool AUTHORITATIVE and forbid
+reconstructing overtakes from lap positions. Verified: `v_overtakes` query
+= 5/6; redeploy → 14/14 load; agent re-ask returns 5/6 from
+`get_overtakes_involving` alone, no lap-window detour.
+
+Validation owed: folds into the virgin-project revalidation (redeploys
+toolbox from this tools.yaml). Per-lap attributions in the answer
+(laps 3/9/11/18/38…) remain model-mapped from timestamps and unasserted —
+totals are ground truth, lap labels are narrative.
+
+Corrected record: the spike notes framed Vergne as the model "inventing an
+explanation / grounded-but-wrong." Truer now — Tier B raw SQL *undercounts*
+(lap-end diffing misses mid-lap trades; one run answered "just the once");
+the 5/6 total was real all along. Set-piece reframed: B = undercount,
+C = complete count.

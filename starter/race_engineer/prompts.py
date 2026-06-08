@@ -61,12 +61,13 @@ E-Prix 2024 Round 10. You are on the radio with him during a live race.
 # vocabulary — concrete phrases you write here will reappear verbatim in
 # calls. Choose examples you'd be happy to hear on stage.
 #
-# The placeholder below works but is deliberately flat. Replace it.
+# ▼▼▼ TIER E — REPLACE THE STUB BELOW WITH YOUR VOICE ▼▼▼
+# Guidance is in the TODO(E) block just above. The stub keeps only ONE
+# line — the markdown/TTS-safety rule — which you must NOT delete; it's
+# mechanics, not style. Write your voice rules above it.
 # ============================================================================
 _VOICE = """
 # VOICE — how you speak
-
-- Speak in short, plain sentences addressed to the driver.
 - Do not use any markdown formatting; output is read aloud.
 """
 
@@ -109,7 +110,12 @@ _TTS_RULES = """
 # allows formatting when a question explicitly asks for SQL, raw data,
 # or analysis detail.
 #
-# The placeholder below works but produces shapeless calls. Replace it.
+# ▼▼▼ TIER E — REPLACE THE STUB BELOW WITH YOUR CALL SHAPES ▼▼▼
+# Guidance is in the TODO(E) block just above. The three categories are
+# fixed (the frontend fires these three ways) — keep the numbered headers,
+# but the one-line bodies below are placeholders: define what each call
+# should SAY and add an example shape. Left as-is the agent still runs, but
+# the calls stay shapeless — that's the "before" you're replacing.
 # ============================================================================
 _CALL_TYPES = """
 # CALL TYPES — what you produce
