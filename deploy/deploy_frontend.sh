@@ -50,7 +50,7 @@ fi
 ENGINE_RESOURCE="$(tr -d '[:space:]' < "$ENGINE_FILE")"
 
 # --- The simulator (for the SIM control bar proxy) ---
-SIM_URL="${SIM_URL:-$(gcloud run services describe fe-simulator --region "$REGION" --format='value(status.url)' 2>/dev/null || true)}"
+SIM_URL="${SIM_URL:-$(gcloud run services describe fe-simulator --region "$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet 2>/dev/null || true)}"
 if [[ -z "$SIM_URL" ]]; then
     echo "WARN: fe-simulator not found — SIM bar will show 'sim: unreachable'." >&2
 fi
@@ -76,6 +76,18 @@ gcloud services enable \
     texttospeech.googleapis.com \
     speech.googleapis.com \
     --project="$PROJECT_ID"
+
+# --- Wait for the Cloud Run admin API to actually serve ---
+# On a brand-new project, `services enable` returns BEFORE the Run admin
+# surface is queryable, so the first deploy/describe call can hit
+# SERVICE_DISABLED and drop an interactive "enable and retry? (y/N)" prompt.
+# Poll a cheap read until it stops failing so the rest runs unattended.
+echo ">>> Waiting for Cloud Run API to settle..."
+for attempt in 1 2 3 4 5 6; do
+    gcloud run services list --region="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1 && break
+    echo "    ...Run API not serving yet — retry ${attempt}/6 in 10s"
+    sleep 10
+done
 
 # --- Service account ---
 echo ">>> Ensuring service account exists..."
@@ -169,9 +181,10 @@ gcloud run deploy "$SERVICE_NAME" \
     --concurrency=80 \
     --timeout=3600 \
     --session-affinity \
-    --set-env-vars="AGENT_MODE=engine,AGENT_ENGINE_RESOURCE=${ENGINE_RESOURCE},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},PROJECT_ID=${PROJECT_ID},RACE_ID=berlin_2024_r10,SIM_URL=${SIM_URL},AGENT_PACKAGE=${DEPLOY_AGENT_PACKAGE}"
+    --set-env-vars="AGENT_MODE=engine,AGENT_ENGINE_RESOURCE=${ENGINE_RESOURCE},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},PROJECT_ID=${PROJECT_ID},RACE_ID=berlin_2024_r10,SIM_URL=${SIM_URL},AGENT_PACKAGE=${DEPLOY_AGENT_PACKAGE}" \
+    --quiet
 
-URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
+URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet)
 
 echo ""
 echo "=================================================================="

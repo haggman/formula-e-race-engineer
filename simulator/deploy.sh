@@ -41,6 +41,18 @@ gcloud services enable \
     artifactregistry.googleapis.com \
     --project="$PROJECT_ID"
 
+# --- Wait for the Cloud Run admin API to actually serve ---
+# On a brand-new project, `services enable` returns BEFORE the Run admin
+# surface is queryable, so the first deploy/describe call can hit
+# SERVICE_DISABLED and drop an interactive "enable and retry? (y/N)" prompt.
+# Poll a cheap read until it stops failing so the rest runs unattended.
+echo ">>> Waiting for Cloud Run API to settle..."
+for attempt in 1 2 3 4 5 6; do
+    gcloud run services list --region="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1 && break
+    echo "    ...Run API not serving yet — retry ${attempt}/6 in 10s"
+    sleep 10
+done
+
 # --- Pub/Sub topic ---
 echo ">>> Ensuring Pub/Sub topic exists..."
 if ! gcloud pubsub topics describe "$TOPIC_NAME" --project="$PROJECT_ID" >/dev/null 2>&1; then
@@ -110,7 +122,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --timeout=3600 \
     --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},PUBSUB_TOPIC=${TOPIC_NAME},FRAMES_BUCKET=${FRAMES_BUCKET},FRAMES_PATH=${FRAMES_PATH},REPLAY_SPEED_MULTIPLIER=${REPLAY_SPEED_MULTIPLIER},AUTO_RESTART=${AUTO_RESTART}"
 
-URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
+URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet)
 echo ""
 echo "=================================================================="
 echo "Deployed!"

@@ -35,6 +35,18 @@ gcloud services enable \
     bigquery.googleapis.com \
     --project="$PROJECT_ID"
 
+# --- Wait for the Cloud Run admin API to actually serve ---
+# On a brand-new project, `services enable` returns BEFORE the Run admin
+# surface is queryable, so the first deploy/describe call can hit
+# SERVICE_DISABLED and drop an interactive "enable and retry? (y/N)" prompt.
+# Poll a cheap read until it stops failing so the rest runs unattended.
+echo ">>> Waiting for Cloud Run API to settle..."
+for attempt in 1 2 3 4 5 6; do
+    gcloud run services list --region="$REGION" --project="$PROJECT_ID" --quiet >/dev/null 2>&1 && break
+    echo "    ...Run API not serving yet — retry ${attempt}/6 in 10s"
+    sleep 10
+done
+
 echo ">>> Ensuring service account exists..."
 if ! gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" >/dev/null 2>&1; then
     gcloud iam service-accounts create "$SA_NAME" \
@@ -109,9 +121,10 @@ gcloud run deploy "$SERVICE_NAME" \
     --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
     --args="--config=/tools/tools.yaml,--address=0.0.0.0,--port=5000" \
     --add-volume="name=tools-vol,type=cloud-storage,bucket=${STAGING_BUCKET}" \
-    --add-volume-mount="volume=tools-vol,mount-path=/tools"
+    --add-volume-mount="volume=tools-vol,mount-path=/tools" \
+    --quiet
 
-URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --format='value(status.url)')
+URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet)
 
 echo ""
 echo "=================================================================="
