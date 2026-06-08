@@ -16,8 +16,8 @@ trigger system, and build the agent in the middle.
 | **In the hackathon room, building** | [`STUDENT_GUIDE.md`](STUDENT_GUIDE.md) — the tiers, the commands, the context |
 | **Running the event** | [`RUN_OF_SHOW.md`](RUN_OF_SHOW.md) — morning-of, the 20-min opening, checkpoints |
 | **Demoing the system** | [`DEMO.md`](DEMO.md) — choreography, question bank, Attack Mode explainer |
-| **Understanding how it was built** | [`PROGRESS.md`](PROGRESS.md) — the full build record, decisions, and gotchas |
-| **Working on the packaging** | [`PACKAGING.md`](PACKAGING.md) — the living Phase 2 record |
+| **Working on the packaging** | [`PACKAGING.md`](PACKAGING.md) — the living Phase 2 record, decisions, and findings |
+| **Lost in the repo** | [`FILE_INDEX.md`](FILE_INDEX.md) — every file and folder, one line each |
 
 ## Quick start
 
@@ -49,12 +49,19 @@ Vertex AI Agent Engine (`AGENT_MODE=engine`, the deployed demo path). The
 
 ## Repo map
 
-`solution/` the reference agent · `starter/` the student package ·
-`frontend/` the pit wall · `shared/` models, scorer, the package seam ·
-`state_writer/` Pub/Sub→Firestore · `simulator/` the race replayer ·
-`toolbox/` the BigQuery tool definitions · `setup/` numbered event setup ·
-`deploy/` the underlying deploy scripts · `scripts/` dev + test harnesses ·
-`notebooks/` BigQuery loading
+- `solution/` — the reference agent
+- `starter/` — the student package
+- `frontend/` — the pit wall
+- `shared/` — models, scorer, the package seam
+- `state_writer/` — Pub/Sub→Firestore
+- `simulator/` — the race replayer
+- `toolbox/` — the BigQuery tool definitions
+- `setup/` — numbered event setup
+- `deploy/` — the underlying deploy scripts
+- `scripts/` — dev + test harnesses
+- `notebooks/` — BigQuery loading
+
+For a file-by-file map of the whole repo, see [`FILE_INDEX.md`](FILE_INDEX.md).
 
 ## Race context
 

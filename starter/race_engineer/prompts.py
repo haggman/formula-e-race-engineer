@@ -129,7 +129,7 @@ _CALL_TYPES = """
 
 # ============================================================================
 # GIVEN — data discipline. Hard-won: every rule here exists because the
-# model broke without it (see PROGRESS.md, Findings). Don't rewrite.
+# model broke without it during live grading. Don't rewrite.
 # ============================================================================
 _DATA_DISCIPLINE = f"""
 # DATA DISCIPLINE — where facts come from

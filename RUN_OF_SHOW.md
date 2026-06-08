@@ -7,6 +7,8 @@ person is NOT the author. Every segment gives you three layers: **SAY**
 Students drive themselves from `STUDENT_GUIDE.md`; your job is the opening
 20 minutes, the checkpoints, and the wrap.
 
+Lost? `FILE_INDEX.md` maps the repo, file by file.
+
 **The one thing students need from you on a board/slide:** the tinyurl to
 the rendered STUDENT_GUIDE on GitHub. **`TINYURL: https://tinyurl.com/FE-Hack-2`**
 

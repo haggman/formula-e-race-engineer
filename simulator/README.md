@@ -17,7 +17,7 @@ Cloud Run service that replays Berlin 2024 R10 race telemetry at race pace, publ
 [GCS frames.jsonl.gz] -> [Cloud Run Service (this)] -> [Pub/Sub fe-telemetry] -> [Agent (Fork 2)]
 ```
 
-The frames file is built once by the companion notebook (`notebook/build_frames.ipynb`), which reads cleaned R10 data from `gs://class-demo/formula-e/berlin_2024/r10/` and produces a calibrated, physics-informed per-second race timeline. The simulator does no computation — it just plays back.
+The frames file is built once by the companion notebook (`notebooks/build_frames.ipynb`), which reads cleaned R10 data from `gs://class-demo/formula-e/berlin_2024/r10/` and produces a calibrated, physics-informed per-second race timeline. The simulator does no computation — it just plays back.
 
 ## Frame schema
 

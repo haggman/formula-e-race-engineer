@@ -1,8 +1,6 @@
 """Tier A/B rehearsal probe — batch-runs the scripted demo questions for
 the build-up progression's first two checkpoints and captures transcripts.
 
-Born as the P3 design spike (scripts/spike_probe.py, transcripts graded
-2026-06-07, decision: ADOPTED); now the standing rehearsal instrument.
 Re-run on event morning and after ANY model change (FE_MODEL escapes
 included) — the Tier A and Tier B checkpoint beats are model-behavior
 demos, and grades beat vibes.
@@ -22,7 +20,7 @@ simulator is not involved.
     python scripts/stage_probe.py --stage a
     python scripts/stage_probe.py --stage b
 
-Transcripts land in spike_transcripts/. Runner mechanics mirror
+Transcripts land in stage_transcripts/. Runner mechanics mirror
 scripts/agent_chat.py (one event loop, run_async, per-event timing); one
 persistent session per stage, like a student's chat.
 """
@@ -75,7 +73,7 @@ else:
 
 APP_NAME = "stage_probe"
 USER_ID = "rehearsal"
-OUT_DIR = Path("spike_transcripts")
+OUT_DIR = Path("stage_transcripts")
 
 QUESTIONS: dict[str, list[tuple[str, str]]] = {
     "a": [
