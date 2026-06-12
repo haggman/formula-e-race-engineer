@@ -233,6 +233,24 @@ rehearsal project. Fix (`sim_iam_retry_patch`, shipped): the same 6×10s
 retry loop as its three siblings; RUN_OF_SHOW's "steps 3/5/6" retry row is
 now literally true.
 
+**Finding #13 (2026-06-12) — the post-deploy describe is the last
+unguarded gcloud surface, and it cascades.** Hit live on a fresh Qwiklabs
+project: fe-toolbox deployed successfully, then the very next line —
+`URL=$(gcloud run services describe ...)` — died with SERVICE_DISABLED for
+run.googleapis.com, the API that had just served the deploy. Mechanism:
+API enablement propagates per frontend replica, so a later call can hit a
+stale replica seconds after a successful one; the "wait for Run API to
+settle" loop only proves ONE call worked. Under `set -e` that killed
+deploy_toolbox.sh → all.sh died at step 3 → steps 4–6 (Firestore rules,
+state writer, SIMULATOR) never ran — and because the morning-of commands
+were pasted as a block, the shell marched on to setup/7 against a
+half-built data plane. That cascade was the real cause of the prior
+session's "Agent Engine deploy failed" and the Finding #11 addendum's
+empty SIM_URL. Fix (shipped): all four post-deploy describe captures
+(toolbox, state_writer, simulator, frontend) retry 6×10s then fail with a
+rerun hint; RUN_OF_SHOW now says to run the morning-of block one line at
+a time.
+
 ### Finding #7 addendum — lite promotion test (graded, FAIL)
 
 Promotion test run 2026-06-06 (2× stint, laps 1–12, graded): timing facts

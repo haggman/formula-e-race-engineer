@@ -39,6 +39,12 @@ You need: the data plane, the deployed engine, and the public pit-wall URL
 > python scripts/stage_probe.py --stage b   # rehearse Tier B + the set-piece (~5 min)
 > echo "Pit wall: $(gcloud run services describe fe-frontend --region=$REGION --format='value(status.url)')"
 > ```
+>
+> **Run these one line at a time** (or chain with `&&`). Pasted as a block,
+> the shell keeps executing the next line even if one fails — a dead
+> `setup/all.sh` followed by a "successful" step 7 builds a frontend on a
+> half-built data plane (Finding #13 in PACKAGING.md: that exact cascade
+> produced a mystery engine failure and an empty SIM_URL).
 
 For a fuller end-to-end check of a fresh deployment, run through
 `SMOKE_TEST.md` — the ~15-min validation pass.

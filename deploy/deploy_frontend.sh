@@ -200,7 +200,20 @@ gcloud run deploy "$SERVICE_NAME" \
     --set-env-vars="AGENT_MODE=engine,AGENT_ENGINE_RESOURCE=${ENGINE_RESOURCE},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},PROJECT_ID=${PROJECT_ID},RACE_ID=berlin_2024_r10,SIM_URL=${SIM_URL},AGENT_PACKAGE=${DEPLOY_AGENT_PACKAGE}" \
     --quiet
 
-URL=$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet)
+# Post-deploy describe can hit a stale API frontend (SERVICE_DISABLED
+# seconds after a successful deploy — enablement propagates per replica).
+# The deploy already succeeded; never let the readback kill the script.
+URL=""
+for attempt in 1 2 3 4 5 6; do
+    URL="$(gcloud run services describe "$SERVICE_NAME" --region="$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet 2>/dev/null || true)"
+    [[ -n "$URL" ]] && break
+    echo "    ...deployed, but describe isn't serving yet (API propagation) — retry ${attempt}/6 in 10s"
+    sleep 10
+done
+if [[ -z "$URL" ]]; then
+    echo "ERROR: ${SERVICE_NAME} deployed but its URL is unreadable after 6 tries — rerun this script (idempotent)." >&2
+    exit 1
+fi
 
 echo ""
 echo "=================================================================="
