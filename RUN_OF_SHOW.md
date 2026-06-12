@@ -37,6 +37,7 @@ You need: the data plane, the deployed engine, and the public pit-wall URL
 > python scripts/engine_smoke.py # one real call through the deployed engine
 > python scripts/stage_probe.py --stage a   # rehearse the Tier A beat (~2 min)
 > python scripts/stage_probe.py --stage b   # rehearse Tier B + the set-piece (~5 min)
+> echo "Pit wall: $(gcloud run services describe fe-frontend --region=$REGION --format='value(status.url)')"
 > ```
 
 For a fuller end-to-end check of a fresh deployment, run through
@@ -59,6 +60,8 @@ their own projects; this rule is about YOUR project only.)
 ## Pre-flight (15 min before doors, on the projector machine)
 
 1. Tinyurl on the board. Deployed pit-wall URL open in the browser.
+   *(Lost the URL? In Cloud Shell:
+   `gcloud run services describe fe-frontend --region=$REGION --format='value(status.url)'`)*
 2. **Audio unlock:** click the 🔇 toggle (the click IS the unlock — browser
    autoplay policy) and confirm you HEAR one radio call over the room
    speakers, at the back of the room.
