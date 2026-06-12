@@ -211,6 +211,19 @@ immune via the `export` builtin swallowing the status). Earned the
 troubleshooting row: silent script death ⇒ `echo $?`, then
 `bash -x ... | tail -20`.
 
+**Finding #11 addendum (2026-06-12) — the `|| true` fix traded silent
+death for a silently sim-less deploy.** Hit live on a morning-of run: the
+same transient gcloud failure now yielded an EMPTY `SIM_URL`, the script
+WARNed once and deployed anyway, baking `SIM_URL=` into the fe-frontend
+env — every SIM-bar call 503'd `{"detail":"SIM_URL not configured"}`. In
+engine mode `main.py`'s loud local-mode startup guard never trips, so the
+broken wall comes up looking healthy. Fix (shipped): discovery retries
+6×10s like its IAM siblings, then hard-fails — a sim-less frontend is
+never worth deploying. Live repair without a rebuild:
+`gcloud run services update fe-frontend --region=$REGION
+--update-env-vars=SIM_URL=$(gcloud run services describe fe-simulator
+--region=$REGION --format='value(status.url)')`.
+
 **Finding #12 — Finding #8's IAM race on the one unpatched surface.**
 simulator/deploy.sh granted topic-level pubsub.publisher with NO retry;
 on a fresh project the grant fired seconds after SA creation and died on

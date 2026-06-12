@@ -50,9 +50,25 @@ fi
 ENGINE_RESOURCE="$(tr -d '[:space:]' < "$ENGINE_FILE")"
 
 # --- The simulator (for the SIM control bar proxy) ---
-SIM_URL="${SIM_URL:-$(gcloud run services describe fe-simulator --region "$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet 2>/dev/null || true)}"
+# REQUIRED: an empty SIM_URL gets baked into the service env and every
+# SIM-bar call 503s ("SIM_URL not configured") — and in engine mode the
+# frontend's loud local-mode startup guard never trips, so the broken wall
+# comes up looking healthy. Discovery retries absorb transient gcloud
+# failures (the Finding #11 mechanism); still empty after that means the
+# simulator genuinely isn't deployed, which is a hard stop, not a WARN.
+if [[ -z "${SIM_URL:-}" ]]; then
+    for attempt in 1 2 3 4 5 6; do
+        SIM_URL="$(gcloud run services describe fe-simulator --region "$REGION" --project="$PROJECT_ID" --format='value(status.url)' --quiet 2>/dev/null || true)"
+        [[ -n "$SIM_URL" ]] && break
+        echo "    ...can't read fe-simulator URL yet (transient gcloud / propagation) — retry ${attempt}/6 in 10s"
+        sleep 10
+    done
+fi
 if [[ -z "$SIM_URL" ]]; then
-    echo "WARN: fe-simulator not found — SIM bar will show 'sim: unreachable'." >&2
+    echo "ERROR: fe-simulator not found in ${REGION} — deploying without it ships a" >&2
+    echo "       pit wall whose SIM bar 503s on everything. Run setup/all.sh (or" >&2
+    echo "       setup/6_deploy_simulator.sh) first, then rerun this script." >&2
+    exit 1
 fi
 
 echo "=================================================================="
