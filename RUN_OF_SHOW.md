@@ -57,6 +57,13 @@ locally in this project while it stands — two engineers on one quota pool
 double-call every moment and can trigger retry storms. (Students are in
 their own projects; this rule is about YOUR project only.)
 
+**Local test path (no deploy needed):** the same UI also runs straight
+from the Cloud Shell terminal — `RUN_SOLUTION=1 bash demo.sh`, then
+**Web Preview → port 8080**. Handy for testing the pit wall before step
+7 exists, or for working on the UI without redeploying. Once
+`fe-frontend` is live, the one-engineer rule above applies: pause/scale
+it down or skip the local run — never both at once.
+
 ## Pre-flight (15 min before doors, on the projector machine)
 
 1. Tinyurl on the board. Deployed pit-wall URL open in the browser.
