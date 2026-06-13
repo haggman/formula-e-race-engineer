@@ -27,6 +27,36 @@ the demo payoff — no solutions. Sizes: **[S]** < 20 min · **[M]** 30–45 min
 - **Payoff:** the single best way to show *agency* — the room sees the agent
   deciding, not just answering.
 
+### [L] Track map with live car dots
+- **Surface:** `frontend/static/index.html` (replace the lap-counter circle),
+  one dict in `ui_state()` in `frontend/main.py`, a one-time analysis script
+  in `scripts/`.
+- **Spec:** swap the lap ring for the real Tempelhof outline with a moving
+  dot per car. The pieces are all waiting:
+  - **Position data:** every 1 Hz frame already carries per-car
+    `gps: {lat, lng, heading}` (see `shared/models.py`) — the frontend
+    poller holds it and `ui_state()` currently throws it away. Three new
+    fields and it's at the browser.
+  - **The map:** the official **Circuit Map V.2** (clean, reads well small)
+    and the Google-Earth-faithful CCTV/TSB plan live at
+    `gs://class-demo/formula-e/reference/`. V2 is stylized, so do NOT
+    affine-fit GPS onto it — go via *fraction of lap*: build a centerline
+    polyline once from car #13's 20 Hz BigQuery trace
+    (`telemetry.tv_gps_lat/long`), project each live fix onto it, take
+    arc-length ÷ 2,345 m → `f`. Trace V2's blue line once as an SVG path
+    (in racing direction, starting at START/FINISH) and place dots with
+    `path.getPointAtLength(f * totalLength)` — dots ride the artwork by
+    construction.
+  - **Calibration gifts, printed on the map:** start/finish offset 0m,
+    i1 @ 680m, i2 @ 1600m — three anchors if proportions need a piecewise
+    stretch (at small sizes they likely won't).
+- **Gotchas:** at 1 Hz a car moves ~55 m between ticks — tween the dots
+  client-side or they teleport. Trace only the track outline, not the
+  branded artwork.
+- **Payoff:** the pit wall stops *telling* you where cars are and starts
+  *showing* you — the lap-3 attack-mode cluster becomes ten dots diving
+  off-line in unison.
+
 ---
 
 ## AGENT
