@@ -37,7 +37,7 @@ You need: the data plane, the deployed engine, and the public pit-wall URL
 > python scripts/engine_smoke.py # one real call through the deployed engine
 > python scripts/stage_probe.py --stage a   # rehearse the Tier A beat (~2 min)
 > python scripts/stage_probe.py --stage b   # rehearse Tier B + the set-piece (~5 min)
-> source activate.sh
+> source activate.sh # if you ran the probes in a new tab
 > echo "Pit wall: $(gcloud run services describe fe-frontend --region=$REGION --format='value(status.url)')"
 > ```
 >
